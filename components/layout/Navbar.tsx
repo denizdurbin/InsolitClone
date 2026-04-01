@@ -38,9 +38,10 @@ export function Navbar() {
     return () => document.removeEventListener('click', close)
   }, [dropdown])
 
-  function handleLogout() {
-    logout()
+  async function handleLogout() {
+    await logout()
     router.push('/')
+    router.refresh()
   }
 
   return (

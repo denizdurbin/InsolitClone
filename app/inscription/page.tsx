@@ -1,9 +1,33 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { createClient } from '@/utils/supabase/client'
+
+function toAuthErrorMessage(message: string) {
+  const normalized = message.toLowerCase()
+
+  if (normalized.includes('user already registered')) {
+    return 'Un compte existe deja avec cet e-mail.'
+  }
+
+  if (normalized.includes('password should be at least')) {
+    return 'Le mot de passe est trop faible.'
+  }
+
+  if (normalized.includes('invalid email')) {
+    return 'Adresse e-mail invalide.'
+  }
+
+  if (normalized.includes('email address') && normalized.includes('invalid')) {
+    return 'Adresse e-mail invalide.'
+  }
+
+  return 'Impossible de creer le compte pour le moment. Reessaie.'
+}
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -36,43 +60,32 @@ function PasswordStrength({ password }: { password: string }) {
   )
 }
 
-export default function InscriptionPage() {
-  const [form, setForm] = useState({ prenom: '', nom: '', email: '', password: '', confirm: '', cgu: false })
-  const [showPass,  setShowPass]  = useState(false)
-  const [showConf,  setShowConf]  = useState(false)
-  const [loading,   setLoading]   = useState(false)
-  const [errors,    setErrors]    = useState<Record<string, string>>({})
+interface FieldProps {
+  id: string
+  label: string
+  type?: string
+  icon: React.ElementType
+  value: string
+  onChange: (value: string) => void
+  error?: string
+  placeholder: string
+  autoComplete: string
+  extra?: React.ReactNode
+}
 
-  const set = (k: string, v: string | boolean) => {
-    setForm(prev => ({ ...prev, [k]: v }))
-    setErrors(prev => ({ ...prev, [k]: '' }))
-  }
-
-  const validate = () => {
-    const e: Record<string, string> = {}
-    if (!form.prenom.trim())   e.prenom   = 'Prénom requis'
-    if (!form.nom.trim())      e.nom      = 'Nom requis'
-    if (!form.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) e.email = 'E-mail invalide'
-    if (form.password.length < 8) e.password = 'Mot de passe trop court (8 car. min)'
-    if (form.password !== form.confirm) e.confirm = 'Les mots de passe ne correspondent pas'
-    if (!form.cgu) e.cgu = "Tu dois accepter les CGU pour continuer"
-    return e
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const errs = validate()
-    if (Object.keys(errs).length) { setErrors(errs); return }
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 1400))
-    setLoading(false)
-    window.location.href = '/profil'
-  }
-
-  const Field = ({ id, label, type = 'text', icon: Icon, value, onChange, error, placeholder, autoComplete, extra }: {
-    id: string; label: string; type?: string; icon: React.ElementType
-    value: string; onChange: (v: string) => void; error?: string; placeholder: string; autoComplete: string; extra?: React.ReactNode
-  }) => (
+function Field({
+  id,
+  label,
+  type = 'text',
+  icon: Icon,
+  value,
+  onChange,
+  error,
+  placeholder,
+  autoComplete,
+  extra,
+}: FieldProps) {
+  return (
     <div>
       <label htmlFor={id} className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{label}</label>
       <div className="relative">
@@ -89,6 +102,76 @@ export default function InscriptionPage() {
       {error && <p id={`${id}-error`} role="alert" className="flex items-center gap-1 text-xs text-red-500 mt-1"><AlertCircle size={11} />{error}</p>}
     </div>
   )
+}
+
+export default function InscriptionPage() {
+  const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
+  const [form, setForm] = useState({ prenom: '', nom: '', email: '', password: '', confirm: '', cgu: false })
+  const [showPass,  setShowPass]  = useState(false)
+  const [showConf,  setShowConf]  = useState(false)
+  const [loading,   setLoading]   = useState(false)
+  const [errors,    setErrors]    = useState<Record<string, string>>({})
+  const [submitError, setSubmitError] = useState('')
+  const [submitNotice, setSubmitNotice] = useState('')
+
+  const set = (k: string, v: string | boolean) => {
+    setForm(prev => ({ ...prev, [k]: v }))
+    setErrors(prev => ({ ...prev, [k]: '' }))
+    setSubmitError('')
+    setSubmitNotice('')
+  }
+
+  const validate = () => {
+    const e: Record<string, string> = {}
+    if (!form.prenom.trim())   e.prenom   = 'Prénom requis'
+    if (!form.nom.trim())      e.nom      = 'Nom requis'
+    if (!form.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) e.email = 'E-mail invalide'
+    if (form.password.length < 8) e.password = 'Mot de passe trop court (8 car. min)'
+    if (form.password !== form.confirm) e.confirm = 'Les mots de passe ne correspondent pas'
+    if (!form.cgu) e.cgu = "Tu dois accepter les CGU pour continuer"
+    return e
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitError('')
+    setSubmitNotice('')
+
+    const errs = validate()
+    if (Object.keys(errs).length) { setErrors(errs); return }
+
+    setLoading(true)
+
+    const normalizedEmail = form.email.trim().toLowerCase()
+
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password: form.password,
+      options: {
+        data: {
+          prenom: form.prenom.trim(),
+          nom: form.nom.trim(),
+        },
+      },
+    })
+
+    if (signUpError) {
+      setSubmitError(toAuthErrorMessage(signUpError.message))
+      setLoading(false)
+      return
+    }
+
+    setLoading(false)
+
+    if (data.session) {
+      router.push('/profil')
+      router.refresh()
+      return
+    }
+
+    setSubmitNotice('Compte cree. Verifie ton e-mail pour confirmer ton inscription puis connecte-toi.')
+  }
 
   return (
     <div className="min-h-[calc(100vh-64px)] flex items-center justify-center bg-gray-50 dark:bg-dark-bg px-4 py-16">
@@ -110,6 +193,20 @@ export default function InscriptionPage() {
 
         {/* Card */}
         <div className="bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl p-8 shadow-sm">
+          {submitError && (
+            <div role="alert" className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl px-4 py-3 mb-5 text-sm">
+              <AlertCircle size={15} className="flex-shrink-0" aria-hidden="true" />
+              {submitError}
+            </div>
+          )}
+
+          {submitNotice && (
+            <div role="status" className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 rounded-xl px-4 py-3 mb-5 text-sm">
+              <CheckCircle size={15} className="flex-shrink-0" aria-hidden="true" />
+              {submitNotice}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
 
             {/* Prénom / Nom */}

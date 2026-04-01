@@ -1,11 +1,33 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { createClient } from '@/utils/supabase/client'
+
+function toAuthErrorMessage(message: string) {
+  const normalized = message.toLowerCase()
+
+  if (normalized.includes('invalid login credentials')) {
+    return 'E-mail ou mot de passe incorrect.'
+  }
+
+  if (normalized.includes('email not confirmed')) {
+    return 'Confirme ton e-mail avant de te connecter.'
+  }
+
+  if (normalized.includes('too many requests')) {
+    return 'Trop de tentatives. Réessaie dans quelques minutes.'
+  }
+
+  return 'Impossible de se connecter pour le moment. Réessaie.'
+}
 
 export default function ConnexionPage() {
+  const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
   const [email,      setEmail]      = useState('')
   const [password,   setPassword]   = useState('')
   const [showPass,   setShowPass]   = useState(false)
@@ -30,11 +52,21 @@ export default function ConnexionPage() {
     }
 
     setLoading(true)
-    // Simule une requête API
-    await new Promise((r) => setTimeout(r, 1200))
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    })
+
+    if (signInError) {
+      setError(toAuthErrorMessage(signInError.message))
+      setLoading(false)
+      return
+    }
+
     setLoading(false)
-    // Redirection simulée
-    window.location.href = '/profil'
+    router.push('/profil')
+    router.refresh()
   }
 
   return (

@@ -15,9 +15,30 @@ const badges = [
 
 interface ProfilClientProps {
   recentPurchases: Offer[]
+  profile: {
+    prenom: string
+    nom: string
+    email: string
+    location: string
+    savingsCents: number
+    offersUsed: number
+    reviewsCount: number
+  }
 }
 
-export default function ProfilClient({ recentPurchases }: ProfilClientProps) {
+function formatMoney(cents: number) {
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100)
+}
+
+export default function ProfilClient({ recentPurchases, profile }: ProfilClientProps) {
+  const initials = `${profile.prenom[0] ?? ''}${profile.nom[0] ?? ''}`.trim().toUpperCase() || (profile.email[0] ?? 'U').toUpperCase()
+  const fullName = `${profile.prenom} ${profile.nom}`.trim() || 'Utilisateur'
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
       <div className="max-w-5xl mx-auto px-6 py-10">
@@ -31,16 +52,16 @@ export default function ProfilClient({ recentPurchases }: ProfilClientProps) {
               className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-black flex-shrink-0 bg-gradient-to-br from-pink-500 to-orange-400"
               aria-hidden="true"
             >
-              SM
+              {initials}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">Sophia M.</h1>
+                  <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{fullName}</h1>
                   <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 dark:text-gray-400">
                     <MapPin size={13} aria-hidden="true" />
-                    <span>Argenteuil, Île-de-France</span>
+                    <span>{profile.location}</span>
                   </div>
                 </div>
                 <Button variant="outline" size="sm" className="flex-shrink-0">
@@ -51,9 +72,9 @@ export default function ProfilClient({ recentPurchases }: ProfilClientProps) {
 
               <div className="flex flex-wrap gap-6 mt-5 pt-5 border-t border-gray-100 dark:border-dark-border">
                 {[
-                  { label: 'Économies', value: '47 €28' },
-                  { label: 'Offres utilisées', value: '12' },
-                  { label: 'Avis laissés', value: '8' },
+                  { label: 'Economies', value: formatMoney(profile.savingsCents) },
+                  { label: 'Offres utilisees', value: String(profile.offersUsed) },
+                  { label: 'Avis laisses', value: String(profile.reviewsCount) },
                 ].map(({ label, value }) => (
                   <div key={label}>
                     <p className="text-xl font-black text-gray-900 dark:text-white">{value}</p>

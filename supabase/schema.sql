@@ -94,6 +94,24 @@ BEFORE UPDATE ON public.users
 FOR EACH ROW
 EXECUTE FUNCTION public.set_updated_at();
 
+CREATE OR REPLACE FUNCTION public.delete_auth_user_on_profile_delete()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+BEGIN
+  DELETE FROM auth.users WHERE id = OLD.id;
+  RETURN OLD;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_profile_deleted ON public.users;
+CREATE TRIGGER on_profile_deleted
+AFTER DELETE ON public.users
+FOR EACH ROW
+EXECUTE FUNCTION public.delete_auth_user_on_profile_delete();
+
 CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -177,8 +195,13 @@ FOR UPDATE
 USING (auth.uid() = id)
 WITH CHECK (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users delete own profile" ON public.users;
+CREATE POLICY "Users delete own profile" ON public.users
+FOR DELETE
+USING (auth.uid() = id);
+
 GRANT SELECT ON public.offers TO anon, authenticated;
 GRANT SELECT ON public.features TO anon, authenticated;
 GRANT SELECT ON public.steps TO anon, authenticated;
 GRANT SELECT ON public.testimonials TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.users TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO authenticated;

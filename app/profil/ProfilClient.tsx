@@ -1,10 +1,13 @@
 'use client'
 
+import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Star, Heart, Award, MapPin, Settings } from 'lucide-react'
+import { Star, Heart, Award, MapPin, Settings, Trash2 } from 'lucide-react'
 import type { Offer } from '@/lib/data'
 import { OfferCard } from '@/components/ui/OfferCard'
 import { Button } from '@/components/ui/Button'
+import { createClient } from '@/utils/supabase/client'
 
 const badges = [
   { emoji: '🏆', label: 'Early adopter', color: 'from-yellow-400 to-orange-400' },
@@ -36,8 +39,48 @@ function formatMoney(cents: number) {
 }
 
 export default function ProfilClient({ recentPurchases, profile }: ProfilClientProps) {
+  const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   const initials = `${profile.prenom[0] ?? ''}${profile.nom[0] ?? ''}`.trim().toUpperCase() || (profile.email[0] ?? 'U').toUpperCase()
   const fullName = `${profile.prenom} ${profile.nom}`.trim() || 'Utilisateur'
+
+  const handleDeleteAccount = async () => {
+    setDeleteError(null)
+
+    const confirmed = window.confirm('Supprimer votre compte ? Cette action est definitive et supprimera vos donnees de profil.')
+    if (!confirmed) {
+      return
+    }
+
+    setIsDeletingAccount(true)
+
+    try {
+      const {
+        data: { user },
+        error: getUserError,
+      } = await supabase.auth.getUser()
+
+      if (getUserError || !user) {
+        throw new Error(getUserError?.message ?? 'Utilisateur non authentifie.')
+      }
+
+      const { error: deleteProfileError } = await supabase.from('users').delete().eq('id', user.id)
+
+      if (deleteProfileError) {
+        throw new Error(deleteProfileError.message)
+      }
+
+      await supabase.auth.signOut({ scope: 'local' })
+      router.replace('/')
+      router.refresh()
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Impossible de supprimer le compte pour le moment.')
+      setIsDeletingAccount(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
@@ -64,10 +107,23 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
                     <span>{profile.location}</span>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" className="flex-shrink-0">
-                  <Settings size={14} aria-hidden="true" />
-                  Modifier le profil
-                </Button>
+                <div className="flex flex-col items-stretch gap-2 w-full sm:w-auto">
+                  <Button variant="outline" size="sm" className="flex-shrink-0" disabled={isDeletingAccount}>
+                    <Settings size={14} aria-hidden="true" />
+                    Modifier le profil
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDeleteAccount}
+                    disabled={isDeletingAccount}
+                    className="flex-shrink-0 border-red-200 text-red-600 hover:border-red-500 hover:text-red-700 dark:border-red-900/60 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                    {isDeletingAccount ? 'Suppression...' : 'Supprimer le compte'}
+                  </Button>
+                  {deleteError && <p className="text-xs text-red-600 dark:text-red-400">{deleteError}</p>}
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-6 mt-5 pt-5 border-t border-gray-100 dark:border-dark-border">

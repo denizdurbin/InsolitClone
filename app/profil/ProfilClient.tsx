@@ -1,13 +1,12 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Star, Heart, Award, MapPin, Settings, Trash2 } from 'lucide-react'
 import type { Offer } from '@/lib/data'
 import { OfferCard } from '@/components/ui/OfferCard'
 import { Button } from '@/components/ui/Button'
-import { createClient } from '@/utils/supabase/client'
 
 const badges = [
   { emoji: '🏆', label: 'Early adopter', color: 'from-yellow-400 to-orange-400' },
@@ -40,7 +39,6 @@ function formatMoney(cents: number) {
 
 export default function ProfilClient({ recentPurchases, profile }: ProfilClientProps) {
   const router = useRouter()
-  const supabase = useMemo(() => createClient(), [])
   const [isDeletingAccount, setIsDeletingAccount] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -58,22 +56,15 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
     setIsDeletingAccount(true)
 
     try {
-      const {
-        data: { user },
-        error: getUserError,
-      } = await supabase.auth.getUser()
+      const response = await fetch('/api/auth/delete-account', {
+        method: 'POST',
+      })
 
-      if (getUserError || !user) {
-        throw new Error(getUserError?.message ?? 'Utilisateur non authentifie.')
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null
+        throw new Error(payload?.message ?? 'Impossible de supprimer le compte pour le moment.')
       }
 
-      const { error: deleteProfileError } = await supabase.from('users').delete().eq('id', user.id)
-
-      if (deleteProfileError) {
-        throw new Error(deleteProfileError.message)
-      }
-
-      await supabase.auth.signOut({ scope: 'local' })
       router.replace('/')
       router.refresh()
     } catch (error) {

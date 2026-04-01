@@ -66,16 +66,27 @@ CREATE TABLE IF NOT EXISTS public.testimonials (
 );
 
 CREATE TABLE IF NOT EXISTS public.users (
-  id UUID PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY,
   prenom TEXT NOT NULL,
   nom TEXT NOT NULL DEFAULT '',
   email TEXT NOT NULL UNIQUE,
-  location TEXT NOT NULL DEFAULT 'Argenteuil, Ile-de-France',
+  password_hash TEXT,
+  location TEXT NOT NULL DEFAULT 'Paris, Ile-de-France',
   savings_cents INTEGER NOT NULL DEFAULT 0 CHECK (savings_cents >= 0),
   offers_used INTEGER NOT NULL DEFAULT 0 CHECK (offers_used >= 0),
   reviews_count INTEGER NOT NULL DEFAULT 0 CHECK (reviews_count >= 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_id_fkey;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+CREATE TABLE IF NOT EXISTS public.user_sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE OR REPLACE FUNCTION public.set_updated_at()
@@ -94,78 +105,25 @@ BEFORE UPDATE ON public.users
 FOR EACH ROW
 EXECUTE FUNCTION public.set_updated_at();
 
-CREATE OR REPLACE FUNCTION public.delete_auth_user_on_profile_delete()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, auth
-AS $$
-BEGIN
-  DELETE FROM auth.users WHERE id = OLD.id;
-  RETURN OLD;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS on_profile_deleted ON public.users;
-CREATE TRIGGER on_profile_deleted
-AFTER DELETE ON public.users
-FOR EACH ROW
-EXECUTE FUNCTION public.delete_auth_user_on_profile_delete();
-
-CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  INSERT INTO public.users (id, prenom, nom, email)
-  VALUES (
-    NEW.id,
-    COALESCE(NULLIF(NEW.raw_user_meta_data ->> 'prenom', ''), 'Utilisateur'),
-    COALESCE(NEW.raw_user_meta_data ->> 'nom', ''),
-    COALESCE(NEW.email, '')
-  )
-  ON CONFLICT (id) DO UPDATE
-  SET
-    email = EXCLUDED.email,
-    prenom = COALESCE(NULLIF(public.users.prenom, ''), EXCLUDED.prenom),
-    nom = COALESCE(NULLIF(public.users.nom, ''), EXCLUDED.nom);
-
-  RETURN NEW;
-END;
-$$;
-
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-AFTER INSERT ON auth.users
-FOR EACH ROW
-EXECUTE FUNCTION public.handle_new_auth_user();
-
-INSERT INTO public.users (id, prenom, nom, email)
-SELECT
-  au.id,
-  COALESCE(NULLIF(au.raw_user_meta_data ->> 'prenom', ''), 'Utilisateur'),
-  COALESCE(au.raw_user_meta_data ->> 'nom', ''),
-  COALESCE(au.email, '')
-FROM auth.users AS au
-ON CONFLICT (id) DO UPDATE
-SET
-  email = EXCLUDED.email,
-  prenom = COALESCE(NULLIF(public.users.prenom, ''), EXCLUDED.prenom),
-  nom = COALESCE(NULLIF(public.users.nom, ''), EXCLUDED.nom);
+DROP FUNCTION IF EXISTS public.handle_new_auth_user();
+DROP TRIGGER IF EXISTS on_profile_deleted ON public.users;
+DROP FUNCTION IF EXISTS public.delete_auth_user_on_profile_delete();
 
 CREATE INDEX IF NOT EXISTS offers_category_idx ON public.offers (category);
 CREATE INDEX IF NOT EXISTS offers_sort_order_idx ON public.offers (sort_order);
 CREATE INDEX IF NOT EXISTS features_sort_order_idx ON public.features (sort_order);
 CREATE INDEX IF NOT EXISTS steps_sort_order_idx ON public.steps (sort_order);
 CREATE INDEX IF NOT EXISTS testimonials_sort_order_idx ON public.testimonials (sort_order);
+CREATE INDEX IF NOT EXISTS user_sessions_user_id_idx ON public.user_sessions (user_id);
+CREATE INDEX IF NOT EXISTS user_sessions_expires_at_idx ON public.user_sessions (expires_at);
 
 ALTER TABLE public.offers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.features ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.testimonials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_sessions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public read offers" ON public.offers;
 CREATE POLICY "Public read offers" ON public.offers FOR SELECT USING (true);
@@ -180,28 +138,17 @@ DROP POLICY IF EXISTS "Public read testimonials" ON public.testimonials;
 CREATE POLICY "Public read testimonials" ON public.testimonials FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Users read own profile" ON public.users;
-CREATE POLICY "Users read own profile" ON public.users
-FOR SELECT
-USING (auth.uid() = id);
-
 DROP POLICY IF EXISTS "Users insert own profile" ON public.users;
-CREATE POLICY "Users insert own profile" ON public.users
-FOR INSERT
-WITH CHECK (auth.uid() = id);
-
 DROP POLICY IF EXISTS "Users update own profile" ON public.users;
-CREATE POLICY "Users update own profile" ON public.users
-FOR UPDATE
-USING (auth.uid() = id)
-WITH CHECK (auth.uid() = id);
-
 DROP POLICY IF EXISTS "Users delete own profile" ON public.users;
-CREATE POLICY "Users delete own profile" ON public.users
-FOR DELETE
-USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users read own profile" ON public.user_sessions;
+DROP POLICY IF EXISTS "Users insert own profile" ON public.user_sessions;
+DROP POLICY IF EXISTS "Users update own profile" ON public.user_sessions;
+DROP POLICY IF EXISTS "Users delete own profile" ON public.user_sessions;
 
 GRANT SELECT ON public.offers TO anon, authenticated;
 GRANT SELECT ON public.features TO anon, authenticated;
 GRANT SELECT ON public.steps TO anon, authenticated;
 GRANT SELECT ON public.testimonials TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO authenticated;
+REVOKE ALL ON public.users FROM anon, authenticated;
+REVOKE ALL ON public.user_sessions FROM anon, authenticated;

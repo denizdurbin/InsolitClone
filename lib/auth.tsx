@@ -1,18 +1,16 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
-import type { User as SupabaseAuthUser } from '@supabase/supabase-js'
-import { createClient } from '@/utils/supabase/client'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 
-interface UserProfileRow {
+interface ApiUser {
   id: string
   prenom: string
   nom: string
   email: string
   location: string
-  savings_cents: number
-  offers_used: number
-  reviews_count: number
+  savingsCents: number
+  offersUsed: number
+  reviewsCount: number
 }
 
 interface User {
@@ -32,6 +30,7 @@ interface AuthContext {
   loading: boolean
   login: (email: string, password: string) => Promise<string | null>
   logout: () => Promise<void>
+  setAuthenticatedUser: (user: ApiUser | null) => void
   isAuthenticated: boolean
 }
 
@@ -40,6 +39,7 @@ const AuthContext = createContext<AuthContext>({
   loading: true,
   login: async () => null,
   logout: async () => {},
+  setAuthenticatedUser: () => {},
   isAuthenticated: false,
 })
 
@@ -53,165 +53,100 @@ function getInitials(prenom: string, nom: string, email: string) {
   return (email[0] ?? 'U').toUpperCase()
 }
 
-function buildFallbackUser(authUser: SupabaseAuthUser): User {
-  const metadata = (authUser.user_metadata ?? {}) as Record<string, unknown>
-  const prenom = typeof metadata.prenom === 'string' && metadata.prenom.trim() ? metadata.prenom.trim() : 'Utilisateur'
-  const nom = typeof metadata.nom === 'string' ? metadata.nom.trim() : ''
-  const email = authUser.email ?? ''
-
+function mapApiUserToUser(data: ApiUser): User {
   return {
-    id: authUser.id,
-    prenom,
-    nom,
-    email,
-    initials: getInitials(prenom, nom, email),
-    location: 'Argenteuil, Ile-de-France',
-    savingsCents: 0,
-    offersUsed: 0,
-    reviewsCount: 0,
+    id: data.id,
+    prenom: data.prenom,
+    nom: data.nom,
+    email: data.email,
+    initials: getInitials(data.prenom, data.nom, data.email),
+    location: data.location,
+    savingsCents: data.savingsCents,
+    offersUsed: data.offersUsed,
+    reviewsCount: data.reviewsCount,
   }
 }
 
-function mapRowToUser(row: UserProfileRow): User {
-  return {
-    id: row.id,
-    prenom: row.prenom,
-    nom: row.nom,
-    email: row.email,
-    initials: getInitials(row.prenom, row.nom, row.email),
-    location: row.location,
-    savingsCents: row.savings_cents,
-    offersUsed: row.offers_used,
-    reviewsCount: row.reviews_count,
+async function parseJsonSafe(response: Response) {
+  try {
+    return await response.json()
+  } catch {
+    return null
   }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const supabase = useMemo(() => createClient(), [])
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const loadUserProfile = useCallback(
-    async (authUser: SupabaseAuthUser | null): Promise<User | null> => {
-      if (!authUser) {
-        return null
+  const loadCurrentUser = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        method: 'GET',
+        cache: 'no-store',
+      })
+
+      const payload = (await parseJsonSafe(response)) as { user?: ApiUser } | null
+
+      if (!response.ok || !payload?.user) {
+        setUser(null)
+      } else {
+        setUser(mapApiUserToUser(payload.user))
       }
-
-      const { data, error } = await supabase
-        .from('users')
-        .select('id,prenom,nom,email,location,savings_cents,offers_used,reviews_count')
-        .eq('id', authUser.id)
-        .maybeSingle()
-
-      if (error) {
-        console.error(`[Auth] loadUserProfile: ${error.message}`)
-      }
-
-      if (data) {
-        return mapRowToUser(data as UserProfileRow)
-      }
-
-      const fallbackUser = buildFallbackUser(authUser)
-
-      const { data: insertedData, error: insertError } = await supabase
-        .from('users')
-        .upsert(
-          {
-            id: fallbackUser.id,
-            prenom: fallbackUser.prenom,
-            nom: fallbackUser.nom,
-            email: fallbackUser.email,
-            location: fallbackUser.location,
-            savings_cents: fallbackUser.savingsCents,
-            offers_used: fallbackUser.offersUsed,
-            reviews_count: fallbackUser.reviewsCount,
-          },
-          { onConflict: 'id' }
-        )
-        .select('id,prenom,nom,email,location,savings_cents,offers_used,reviews_count')
-        .maybeSingle()
-
-      if (insertError) {
-        console.error(`[Auth] createFallbackProfile: ${insertError.message}`)
-        return fallbackUser
-      }
-
-      if (!insertedData) {
-        return fallbackUser
-      }
-
-      return mapRowToUser(insertedData as UserProfileRow)
-    },
-    [supabase]
-  )
+    } catch {
+      setUser(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    let active = true
-
-    const syncAuthState = async (authUser: SupabaseAuthUser | null) => {
-      const nextUser = await loadUserProfile(authUser)
-      if (active) {
-        setUser(nextUser)
-      }
-    }
-
-    const initialize = async () => {
-      const {
-        data: { user: authUser },
-        error,
-      } = await supabase.auth.getUser()
-
-      if (error) {
-        console.error(`[Auth] initialize: ${error.message}`)
-      }
-
-      await syncAuthState(authUser)
-
-      if (active) {
-        setLoading(false)
-      }
-    }
-
-    initialize()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      await syncAuthState(session?.user ?? null)
-      if (active) {
-        setLoading(false)
-      }
-    })
-
-    return () => {
-      active = false
-      subscription.unsubscribe()
-    }
-  }, [loadUserProfile, supabase])
+    void loadCurrentUser()
+  }, [loadCurrentUser])
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+        })
 
-      if (error) {
-        return error.message
+        const payload = (await parseJsonSafe(response)) as { message?: string; user?: ApiUser } | null
+
+        if (!response.ok || !payload?.user) {
+          return payload?.message ?? 'Impossible de se connecter pour le moment. Reessaie.'
+        }
+
+        setUser(mapApiUserToUser(payload.user))
+        return null
+      } catch {
+        return 'Impossible de se connecter pour le moment. Reessaie.'
       }
-
-      return null
     },
-    [supabase]
+    []
   )
 
   const logout = useCallback(async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      console.error(`[Auth] logout: ${error.message}`)
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+      })
+    } finally {
+      setUser(null)
     }
-    setUser(null)
-  }, [supabase])
+  }, [])
+
+  const setAuthenticatedUser = useCallback((nextUser: ApiUser | null) => {
+    setUser(nextUser ? mapApiUserToUser(nextUser) : null)
+    setLoading(false)
+  }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, setAuthenticatedUser, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   )

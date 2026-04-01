@@ -1,16 +1,16 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, User, MapPin, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { createClient } from '@/utils/supabase/client'
+import { useAuth } from '@/lib/auth'
 
 function toAuthErrorMessage(message: string) {
   const normalized = message.toLowerCase()
 
-  if (normalized.includes('user already registered')) {
+  if (normalized.includes('user already registered') || normalized.includes('existe deja')) {
     return 'Un compte existe deja avec cet e-mail.'
   }
 
@@ -24,6 +24,10 @@ function toAuthErrorMessage(message: string) {
 
   if (normalized.includes('email address') && normalized.includes('invalid')) {
     return 'Adresse e-mail invalide.'
+  }
+
+  if (message.trim()) {
+    return message
   }
 
   return 'Impossible de creer le compte pour le moment. Reessaie.'
@@ -106,14 +110,15 @@ function Field({
 
 export default function InscriptionPage() {
   const router = useRouter()
-  const supabase = useMemo(() => createClient(), [])
-  const [form, setForm] = useState({ prenom: '', nom: '', email: '', password: '', confirm: '', cgu: false })
+  const { setAuthenticatedUser } = useAuth()
+  const [form, setForm] = useState({ prenom: '', nom: '', location: '', email: '', password: '', confirm: '', cgu: false })
   const [showPass,  setShowPass]  = useState(false)
   const [showConf,  setShowConf]  = useState(false)
   const [loading,   setLoading]   = useState(false)
   const [errors,    setErrors]    = useState<Record<string, string>>({})
   const [submitError, setSubmitError] = useState('')
   const [submitNotice, setSubmitNotice] = useState('')
+  const [cityOptions, setCityOptions] = useState<string[]>([])
 
   const set = (k: string, v: string | boolean) => {
     setForm(prev => ({ ...prev, [k]: v }))
@@ -122,10 +127,58 @@ export default function InscriptionPage() {
     setSubmitNotice('')
   }
 
+  useEffect(() => {
+    const query = form.location.trim()
+
+    if (query.length < 2) {
+      setCityOptions([])
+      return
+    }
+
+    const controller = new AbortController()
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(query)}&fields=nom,codeDepartement&boost=population&limit=12`,
+          {
+            signal: controller.signal,
+          }
+        )
+
+        if (!response.ok) {
+          setCityOptions([])
+          return
+        }
+
+        const data = (await response.json()) as Array<{ nom: string; codeDepartement?: string }>
+
+        const options = Array.from(
+          new Set(
+            data.map((city) =>
+              city.codeDepartement ? `${city.nom}, France (${city.codeDepartement})` : `${city.nom}, France`
+            )
+          )
+        )
+
+        setCityOptions(options)
+      } catch {
+        if (!controller.signal.aborted) {
+          setCityOptions([])
+        }
+      }
+    }, 250)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeout)
+    }
+  }, [form.location])
+
   const validate = () => {
     const e: Record<string, string> = {}
     if (!form.prenom.trim())   e.prenom   = 'Prénom requis'
     if (!form.nom.trim())      e.nom      = 'Nom requis'
+    if (!form.location.trim()) e.location = 'Adresse requise'
     if (!form.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) e.email = 'E-mail invalide'
     if (form.password.length < 8) e.password = 'Mot de passe trop court (8 car. min)'
     if (form.password !== form.confirm) e.confirm = 'Les mots de passe ne correspondent pas'
@@ -145,32 +198,47 @@ export default function InscriptionPage() {
 
     const normalizedEmail = form.email.trim().toLowerCase()
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password: form.password,
-      options: {
-        data: {
-          prenom: form.prenom.trim(),
-          nom: form.nom.trim(),
-        },
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        prenom: form.prenom.trim(),
+        nom: form.nom.trim(),
+        location: form.location.trim(),
+        email: normalizedEmail,
+        password: form.password,
+      }),
     })
 
-    if (signUpError) {
-      setSubmitError(toAuthErrorMessage(signUpError.message))
+    const payload = (await response.json().catch(() => null)) as {
+      message?: string
+      user?: {
+        id: string
+        prenom: string
+        nom: string
+        email: string
+        location: string
+        savingsCents: number
+        offersUsed: number
+        reviewsCount: number
+      }
+    } | null
+
+    if (!response.ok) {
+      setSubmitError(toAuthErrorMessage(payload?.message ?? ''))
       setLoading(false)
       return
     }
 
-    setLoading(false)
-
-    if (data.session) {
-      router.push('/profil')
-      router.refresh()
-      return
+    if (payload?.user) {
+      setAuthenticatedUser(payload.user)
     }
 
-    setSubmitNotice('Compte cree. Verifie ton e-mail pour confirmer ton inscription puis connecte-toi.')
+    setLoading(false)
+    router.push('/profil')
+    router.refresh()
   }
 
   return (
@@ -203,6 +271,33 @@ export default function InscriptionPage() {
               <Field id="nom" label="Nom" icon={User} value={form.nom}
                 onChange={v => set('nom', v)} error={errors.nom}
                 placeholder="Dupont" autoComplete="family-name" />
+            </div>
+
+            {/* Adresse */}
+            <div>
+              <label htmlFor="location" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Adresse (ville)</label>
+              <div className="relative">
+                <MapPin size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+                <input
+                  id="location"
+                  type="text"
+                  autoComplete="address-level2"
+                  value={form.location}
+                  list="france-cities-list"
+                  placeholder="Ex: Lyon, France"
+                  onChange={(e) => set('location', e.target.value)}
+                  aria-invalid={!!errors.location}
+                  aria-describedby={errors.location ? 'location-error' : 'location-help'}
+                  className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm text-gray-900 dark:text-white placeholder:text-gray-400 outline-none transition-colors bg-gray-50 dark:bg-dark-alt
+                    ${errors.location ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-dark-border focus:border-pink focus:ring-1 focus:ring-pink'}`}
+                />
+              </div>
+              <datalist id="france-cities-list">
+                {cityOptions.map((city) => (
+                  <option key={city} value={city} />
+                ))}
+              </datalist>
+              {errors.location && <p id="location-error" role="alert" className="flex items-center gap-1 text-xs text-red-500 mt-1"><AlertCircle size={11} />{errors.location}</p>}
             </div>
 
             {/* Email */}

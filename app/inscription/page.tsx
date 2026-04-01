@@ -193,20 +193,6 @@ export default function InscriptionPage() {
 
         {/* Card */}
         <div className="bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl p-8 shadow-sm">
-          {submitError && (
-            <div role="alert" className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl px-4 py-3 mb-5 text-sm">
-              <AlertCircle size={15} className="flex-shrink-0" aria-hidden="true" />
-              {submitError}
-            </div>
-          )}
-
-          {submitNotice && (
-            <div role="status" className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 rounded-xl px-4 py-3 mb-5 text-sm">
-              <CheckCircle size={15} className="flex-shrink-0" aria-hidden="true" />
-              {submitNotice}
-            </div>
-          )}
-
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
 
             {/* Prénom / Nom */}
@@ -299,22 +285,6 @@ export default function InscriptionPage() {
               ) : 'Créer mon compte gratuitement'}
             </Button>
           </form>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-gray-100 dark:bg-dark-border" />
-            <span className="text-xs text-gray-400 font-medium">ou s&apos;inscrire avec</span>
-            <div className="flex-1 h-px bg-gray-100 dark:bg-dark-border" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {[{ label: 'Google', emoji: '🔵' }, { label: 'Apple', emoji: '🍎' }].map(({ label, emoji }) => (
-              <button key={label} type="button"
-                className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-alt text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-pink hover:text-pink transition-all">
-                <span aria-hidden="true">{emoji}</span>{label}
-              </button>
-            ))}
-          </div>
         </div>
 
         <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
@@ -322,6 +292,24 @@ export default function InscriptionPage() {
           <Link href="/connexion" className="text-pink font-semibold hover:underline">Se connecter</Link>
         </p>
       </div>
+
+      {(submitError || submitNotice) && (
+        <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
+          {submitError && (
+            <div role="alert" className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl px-4 py-3 text-sm shadow-lg">
+              <AlertCircle size={15} className="flex-shrink-0" aria-hidden="true" />
+              {submitError}
+            </div>
+          )}
+
+          {submitNotice && (
+            <div role="status" className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 rounded-xl px-4 py-3 text-sm shadow-lg">
+              <CheckCircle size={15} className="flex-shrink-0" aria-hidden="true" />
+              {submitNotice}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

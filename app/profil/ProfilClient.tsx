@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Star, Heart, Award, MapPin, Settings } from 'lucide-react'
+import { Star, Heart, Award, MapPin, Settings, Trash2 } from 'lucide-react'
 import type { Offer } from '@/lib/data'
 import { OfferCard } from '@/components/ui/OfferCard'
 import { Button } from '@/components/ui/Button'
@@ -15,9 +17,62 @@ const badges = [
 
 interface ProfilClientProps {
   recentPurchases: Offer[]
+  profile: {
+    prenom: string
+    nom: string
+    email: string
+    location: string
+    savingsCents: number
+    offersUsed: number
+    reviewsCount: number
+  }
 }
 
-export default function ProfilClient({ recentPurchases }: ProfilClientProps) {
+function formatMoney(cents: number) {
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100)
+}
+
+export default function ProfilClient({ recentPurchases, profile }: ProfilClientProps) {
+  const router = useRouter()
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const initials = `${profile.prenom[0] ?? ''}${profile.nom[0] ?? ''}`.trim().toUpperCase() || (profile.email[0] ?? 'U').toUpperCase()
+  const fullName = `${profile.prenom} ${profile.nom}`.trim() || 'Utilisateur'
+
+  const handleDeleteAccount = async () => {
+    setDeleteError(null)
+
+    const confirmed = window.confirm('Supprimer votre compte ? Cette action est definitive et supprimera vos donnees de profil.')
+    if (!confirmed) {
+      return
+    }
+
+    setIsDeletingAccount(true)
+
+    try {
+      const response = await fetch('/api/auth/delete-account', {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null
+        throw new Error(payload?.message ?? 'Impossible de supprimer le compte pour le moment.')
+      }
+
+      router.replace('/')
+      router.refresh()
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Impossible de supprimer le compte pour le moment.')
+      setIsDeletingAccount(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
       <div className="max-w-5xl mx-auto px-6 py-10">
@@ -31,29 +86,42 @@ export default function ProfilClient({ recentPurchases }: ProfilClientProps) {
               className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-black flex-shrink-0 bg-gradient-to-br from-pink-500 to-orange-400"
               aria-hidden="true"
             >
-              SM
+              {initials}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">Sophia M.</h1>
+                  <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{fullName}</h1>
                   <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 dark:text-gray-400">
                     <MapPin size={13} aria-hidden="true" />
-                    <span>Argenteuil, Île-de-France</span>
+                    <span>{profile.location}</span>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" className="flex-shrink-0">
-                  <Settings size={14} aria-hidden="true" />
-                  Modifier le profil
-                </Button>
+                <div className="flex flex-col items-stretch gap-2 w-full sm:w-auto">
+                  <Button variant="outline" size="sm" className="flex-shrink-0" disabled={isDeletingAccount}>
+                    <Settings size={14} aria-hidden="true" />
+                    Modifier le profil
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDeleteAccount}
+                    disabled={isDeletingAccount}
+                    className="flex-shrink-0 border-red-200 text-red-600 hover:border-red-500 hover:text-red-700 dark:border-red-900/60 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                    {isDeletingAccount ? 'Suppression...' : 'Supprimer le compte'}
+                  </Button>
+                  {deleteError && <p className="text-xs text-red-600 dark:text-red-400">{deleteError}</p>}
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-6 mt-5 pt-5 border-t border-gray-100 dark:border-dark-border">
                 {[
-                  { label: 'Économies', value: '47 €28' },
-                  { label: 'Offres utilisées', value: '12' },
-                  { label: 'Avis laissés', value: '8' },
+                  { label: 'Economies', value: formatMoney(profile.savingsCents) },
+                  { label: 'Offres utilisees', value: String(profile.offersUsed) },
+                  { label: 'Avis laisses', value: String(profile.reviewsCount) },
                 ].map(({ label, value }) => (
                   <div key={label}>
                     <p className="text-xl font-black text-gray-900 dark:text-white">{value}</p>

@@ -1,9 +1,37 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Eye, EyeOff, Mail, Lock, User, MapPin, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { useAuth } from '@/lib/auth'
+
+function toAuthErrorMessage(message: string) {
+  const normalized = message.toLowerCase()
+
+  if (normalized.includes('user already registered') || normalized.includes('existe deja')) {
+    return 'Un compte existe deja avec cet e-mail.'
+  }
+
+  if (normalized.includes('password should be at least')) {
+    return 'Le mot de passe est trop faible.'
+  }
+
+  if (normalized.includes('invalid email')) {
+    return 'Adresse e-mail invalide.'
+  }
+
+  if (normalized.includes('email address') && normalized.includes('invalid')) {
+    return 'Adresse e-mail invalide.'
+  }
+
+  if (message.trim()) {
+    return message
+  }
+
+  return 'Impossible de creer le compte pour le moment. Reessaie.'
+}
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -36,43 +64,32 @@ function PasswordStrength({ password }: { password: string }) {
   )
 }
 
-export default function InscriptionPage() {
-  const [form, setForm] = useState({ prenom: '', nom: '', email: '', password: '', confirm: '', cgu: false })
-  const [showPass,  setShowPass]  = useState(false)
-  const [showConf,  setShowConf]  = useState(false)
-  const [loading,   setLoading]   = useState(false)
-  const [errors,    setErrors]    = useState<Record<string, string>>({})
+interface FieldProps {
+  id: string
+  label: string
+  type?: string
+  icon: React.ElementType
+  value: string
+  onChange: (value: string) => void
+  error?: string
+  placeholder: string
+  autoComplete: string
+  extra?: React.ReactNode
+}
 
-  const set = (k: string, v: string | boolean) => {
-    setForm(prev => ({ ...prev, [k]: v }))
-    setErrors(prev => ({ ...prev, [k]: '' }))
-  }
-
-  const validate = () => {
-    const e: Record<string, string> = {}
-    if (!form.prenom.trim())   e.prenom   = 'Prénom requis'
-    if (!form.nom.trim())      e.nom      = 'Nom requis'
-    if (!form.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) e.email = 'E-mail invalide'
-    if (form.password.length < 8) e.password = 'Mot de passe trop court (8 car. min)'
-    if (form.password !== form.confirm) e.confirm = 'Les mots de passe ne correspondent pas'
-    if (!form.cgu) e.cgu = "Tu dois accepter les CGU pour continuer"
-    return e
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const errs = validate()
-    if (Object.keys(errs).length) { setErrors(errs); return }
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 1400))
-    setLoading(false)
-    window.location.href = '/profil'
-  }
-
-  const Field = ({ id, label, type = 'text', icon: Icon, value, onChange, error, placeholder, autoComplete, extra }: {
-    id: string; label: string; type?: string; icon: React.ElementType
-    value: string; onChange: (v: string) => void; error?: string; placeholder: string; autoComplete: string; extra?: React.ReactNode
-  }) => (
+function Field({
+  id,
+  label,
+  type = 'text',
+  icon: Icon,
+  value,
+  onChange,
+  error,
+  placeholder,
+  autoComplete,
+  extra,
+}: FieldProps) {
+  return (
     <div>
       <label htmlFor={id} className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">{label}</label>
       <div className="relative">
@@ -89,6 +106,140 @@ export default function InscriptionPage() {
       {error && <p id={`${id}-error`} role="alert" className="flex items-center gap-1 text-xs text-red-500 mt-1"><AlertCircle size={11} />{error}</p>}
     </div>
   )
+}
+
+export default function InscriptionPage() {
+  const router = useRouter()
+  const { setAuthenticatedUser } = useAuth()
+  const [form, setForm] = useState({ prenom: '', nom: '', location: '', email: '', password: '', confirm: '', cgu: false })
+  const [showPass,  setShowPass]  = useState(false)
+  const [showConf,  setShowConf]  = useState(false)
+  const [loading,   setLoading]   = useState(false)
+  const [errors,    setErrors]    = useState<Record<string, string>>({})
+  const [submitError, setSubmitError] = useState('')
+  const [submitNotice, setSubmitNotice] = useState('')
+  const [cityOptions, setCityOptions] = useState<string[]>([])
+
+  const set = (k: string, v: string | boolean) => {
+    setForm(prev => ({ ...prev, [k]: v }))
+    setErrors(prev => ({ ...prev, [k]: '' }))
+    setSubmitError('')
+    setSubmitNotice('')
+  }
+
+  useEffect(() => {
+    const query = form.location.trim()
+
+    if (query.length < 2) {
+      setCityOptions([])
+      return
+    }
+
+    const controller = new AbortController()
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(query)}&fields=nom,codeDepartement&boost=population&limit=12`,
+          {
+            signal: controller.signal,
+          }
+        )
+
+        if (!response.ok) {
+          setCityOptions([])
+          return
+        }
+
+        const data = (await response.json()) as Array<{ nom: string; codeDepartement?: string }>
+
+        const options = Array.from(
+          new Set(
+            data.map((city) =>
+              city.codeDepartement ? `${city.nom}, France (${city.codeDepartement})` : `${city.nom}, France`
+            )
+          )
+        )
+
+        setCityOptions(options)
+      } catch {
+        if (!controller.signal.aborted) {
+          setCityOptions([])
+        }
+      }
+    }, 250)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeout)
+    }
+  }, [form.location])
+
+  const validate = () => {
+    const e: Record<string, string> = {}
+    if (!form.prenom.trim())   e.prenom   = 'Prénom requis'
+    if (!form.nom.trim())      e.nom      = 'Nom requis'
+    if (!form.location.trim()) e.location = 'Adresse requise'
+    if (!form.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) e.email = 'E-mail invalide'
+    if (form.password.length < 8) e.password = 'Mot de passe trop court (8 car. min)'
+    if (form.password !== form.confirm) e.confirm = 'Les mots de passe ne correspondent pas'
+    if (!form.cgu) e.cgu = "Tu dois accepter les CGU pour continuer"
+    return e
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitError('')
+    setSubmitNotice('')
+
+    const errs = validate()
+    if (Object.keys(errs).length) { setErrors(errs); return }
+
+    setLoading(true)
+
+    const normalizedEmail = form.email.trim().toLowerCase()
+
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prenom: form.prenom.trim(),
+        nom: form.nom.trim(),
+        location: form.location.trim(),
+        email: normalizedEmail,
+        password: form.password,
+      }),
+    })
+
+    const payload = (await response.json().catch(() => null)) as {
+      message?: string
+      user?: {
+        id: string
+        prenom: string
+        nom: string
+        email: string
+        location: string
+        savingsCents: number
+        offersUsed: number
+        reviewsCount: number
+      }
+    } | null
+
+    if (!response.ok) {
+      setSubmitError(toAuthErrorMessage(payload?.message ?? ''))
+      setLoading(false)
+      return
+    }
+
+    if (payload?.user) {
+      setAuthenticatedUser(payload.user)
+    }
+
+    setLoading(false)
+    router.push('/profil')
+    router.refresh()
+  }
 
   return (
     <div className="min-h-[calc(100vh-64px)] flex items-center justify-center bg-gray-50 dark:bg-dark-bg px-4 py-16">
@@ -120,6 +271,33 @@ export default function InscriptionPage() {
               <Field id="nom" label="Nom" icon={User} value={form.nom}
                 onChange={v => set('nom', v)} error={errors.nom}
                 placeholder="Dupont" autoComplete="family-name" />
+            </div>
+
+            {/* Adresse */}
+            <div>
+              <label htmlFor="location" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Adresse (ville)</label>
+              <div className="relative">
+                <MapPin size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+                <input
+                  id="location"
+                  type="text"
+                  autoComplete="address-level2"
+                  value={form.location}
+                  list="france-cities-list"
+                  placeholder="Ex: Lyon, France"
+                  onChange={(e) => set('location', e.target.value)}
+                  aria-invalid={!!errors.location}
+                  aria-describedby={errors.location ? 'location-error' : 'location-help'}
+                  className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm text-gray-900 dark:text-white placeholder:text-gray-400 outline-none transition-colors bg-gray-50 dark:bg-dark-alt
+                    ${errors.location ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-dark-border focus:border-pink focus:ring-1 focus:ring-pink'}`}
+                />
+              </div>
+              <datalist id="france-cities-list">
+                {cityOptions.map((city) => (
+                  <option key={city} value={city} />
+                ))}
+              </datalist>
+              {errors.location && <p id="location-error" role="alert" className="flex items-center gap-1 text-xs text-red-500 mt-1"><AlertCircle size={11} />{errors.location}</p>}
             </div>
 
             {/* Email */}
@@ -202,22 +380,6 @@ export default function InscriptionPage() {
               ) : 'Créer mon compte gratuitement'}
             </Button>
           </form>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-gray-100 dark:bg-dark-border" />
-            <span className="text-xs text-gray-400 font-medium">ou s&apos;inscrire avec</span>
-            <div className="flex-1 h-px bg-gray-100 dark:bg-dark-border" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {[{ label: 'Google', emoji: '🔵' }, { label: 'Apple', emoji: '🍎' }].map(({ label, emoji }) => (
-              <button key={label} type="button"
-                className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-alt text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-pink hover:text-pink transition-all">
-                <span aria-hidden="true">{emoji}</span>{label}
-              </button>
-            ))}
-          </div>
         </div>
 
         <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
@@ -225,6 +387,24 @@ export default function InscriptionPage() {
           <Link href="/connexion" className="text-pink font-semibold hover:underline">Se connecter</Link>
         </p>
       </div>
+
+      {(submitError || submitNotice) && (
+        <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
+          {submitError && (
+            <div role="alert" className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl px-4 py-3 text-sm shadow-lg">
+              <AlertCircle size={15} className="flex-shrink-0" aria-hidden="true" />
+              {submitError}
+            </div>
+          )}
+
+          {submitNotice && (
+            <div role="status" className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 rounded-xl px-4 py-3 text-sm shadow-lg">
+              <CheckCircle size={15} className="flex-shrink-0" aria-hidden="true" />
+              {submitNotice}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

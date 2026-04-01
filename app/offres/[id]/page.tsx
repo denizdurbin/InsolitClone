@@ -1,40 +1,43 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { offers } from '@/lib/data'
 import { Button } from '@/components/ui/Button'
+import { getOfferById, getRelatedOffers } from '@/lib/supabase-data'
 import { Star, MapPin, ArrowLeft, Clock, Tag, CheckCircle } from 'lucide-react'
 
 interface PageProps {
   params: { id: string }
 }
 
-export function generateStaticParams() {
-  return offers.map((o) => ({ id: o.id }))
-}
+export async function generateMetadata({ params }: PageProps) {
+  const offer = await getOfferById(params.id)
 
-export function generateMetadata({ params }: PageProps) {
-  const offer = offers.find((o) => o.id === params.id)
-  if (!offer) return {}
+  if (!offer) {
+    return {}
+  }
+
   return {
     title: `${offer.title} — Insolit`,
     description: offer.description,
   }
 }
 
-export default function OfferDetailPage({ params }: PageProps) {
-  const offer = offers.find((o) => o.id === params.id)
-  if (!offer) notFound()
+export default async function OfferDetailPage({ params }: PageProps) {
+  const offer = await getOfferById(params.id)
+
+  if (!offer) {
+    notFound()
+  }
+
+  const relatedOffers = await getRelatedOffers(offer.category, offer.id, 3)
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
-      {/* Hero image */}
       <div className={`relative h-64 md:h-80 bg-gradient-to-br ${offer.gradient} flex items-center justify-center`}>
         <span className="text-white font-black text-5xl md:text-7xl drop-shadow-lg" aria-hidden="true">
           {offer.emoji}
         </span>
         <div className="absolute inset-0 bg-black/20" />
 
-        {/* Back button */}
         <Link
           href="/offres"
           className="absolute top-4 left-4 md:top-6 md:left-6 flex items-center gap-2 bg-black/30 backdrop-blur-sm text-white rounded-full px-4 py-2 text-sm font-medium hover:bg-black/50 transition-colors"
@@ -47,10 +50,7 @@ export default function OfferDetailPage({ params }: PageProps) {
 
       <div className="max-w-4xl mx-auto px-6 -mt-8 pb-16">
         <div className="grid md:grid-cols-[1fr_320px] gap-6">
-
-          {/* Main content */}
           <div className="space-y-5">
-            {/* Card header */}
             <div className="bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl p-6">
               <span className="text-xs font-bold text-pink uppercase tracking-widest mb-2 block">
                 {offer.categoryLabel}
@@ -63,25 +63,22 @@ export default function OfferDetailPage({ params }: PageProps) {
               </p>
 
               <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-                {/* Rating */}
                 <div className="flex items-center gap-1.5" aria-label={`Note : ${offer.rating} sur 5`}>
-                  {Array.from({ length: 5 }).map((_, i) => (
+                  {Array.from({ length: 5 }).map((_, index) => (
                     <Star
-                      key={i}
+                      key={index}
                       size={14}
-                      className={i < offer.rating ? 'fill-yellow text-yellow' : 'fill-gray-200 text-gray-200'}
+                      className={index < offer.rating ? 'fill-yellow text-yellow' : 'fill-gray-200 text-gray-200'}
                     />
                   ))}
                   <span className="font-semibold text-gray-800 dark:text-gray-200">{offer.rating}.0</span>
                 </div>
-                {/* Distance */}
                 {offer.distance && offer.distance !== '—' && (
                   <div className="flex items-center gap-1">
                     <MapPin size={14} className="text-pink" aria-hidden="true" />
                     <span>{offer.distance}</span>
                   </div>
                 )}
-                {/* Badge */}
                 {offer.badge && (
                   <span className="bg-pink/10 text-pink border border-pink/25 rounded-full px-3 py-0.5 text-xs font-bold">
                     {offer.badge}
@@ -90,7 +87,6 @@ export default function OfferDetailPage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Details */}
             {offer.details && (
               <div className="bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl p-6">
                 <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -98,8 +94,8 @@ export default function OfferDetailPage({ params }: PageProps) {
                   Détails de l&apos;offre
                 </h2>
                 <ul className="space-y-3">
-                  {offer.details.map((detail, i) => (
-                    <li key={i} className="flex items-start gap-3">
+                  {offer.details.map((detail, index) => (
+                    <li key={index} className="flex items-start gap-3">
                       <CheckCircle size={16} className="text-green flex-shrink-0 mt-0.5" aria-hidden="true" />
                       <span className="text-sm text-gray-600 dark:text-gray-400">{detail}</span>
                     </li>
@@ -108,7 +104,6 @@ export default function OfferDetailPage({ params }: PageProps) {
               </div>
             )}
 
-            {/* Address */}
             {offer.address && (
               <div className="bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl p-6">
                 <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
@@ -116,7 +111,6 @@ export default function OfferDetailPage({ params }: PageProps) {
                   Adresse
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">{offer.address}</p>
-                {/* Map placeholder */}
                 <div
                   className="mt-4 h-40 rounded-xl bg-gray-100 dark:bg-dark-alt border border-gray-200 dark:border-dark-border flex items-center justify-center"
                   aria-label="Carte de localisation"
@@ -127,14 +121,11 @@ export default function OfferDetailPage({ params }: PageProps) {
             )}
           </div>
 
-          {/* Sidebar — CTA */}
           <div className="space-y-4">
             <div className="bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl p-6 sticky top-24">
               <p className="text-xs text-gray-400 uppercase font-bold tracking-widest mb-1">Offre Insolit</p>
               <p className="text-lg font-extrabold text-gray-900 dark:text-white mb-1">{offer.description}</p>
-              {offer.badge && (
-                <p className="text-2xl font-black text-pink mb-5">{offer.badge}</p>
-              )}
+              {offer.badge && <p className="text-2xl font-black text-pink mb-5">{offer.badge}</p>}
 
               <Button className="w-full justify-center mb-3" size="lg">
                 Utiliser cette offre
@@ -151,30 +142,30 @@ export default function OfferDetailPage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Other offers same category */}
             <div className="bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl p-5">
               <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-4">
                 Autres offres
               </p>
               <div className="space-y-3">
-                {offers
-                  .filter((o) => o.category === offer.category && o.id !== offer.id)
-                  .slice(0, 3)
-                  .map((o) => (
-                    <Link
-                      key={o.id}
-                      href={`/offres/${o.id}`}
-                      className="flex items-center gap-3 group hover:text-pink transition-colors"
+                {relatedOffers.map((relatedOffer) => (
+                  <Link
+                    key={relatedOffer.id}
+                    href={`/offres/${relatedOffer.id}`}
+                    className="flex items-center gap-3 group hover:text-pink transition-colors"
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0 bg-gradient-to-br ${relatedOffer.gradient}`}
                     >
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0 bg-gradient-to-br ${o.gradient}`}>
-                        <span className="text-white">{o.emoji.slice(0,2)}</span>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate group-hover:text-pink">{o.title}</p>
-                        <p className="text-xs text-gray-400 truncate">{o.description}</p>
-                      </div>
-                    </Link>
-                  ))}
+                      <span className="text-white">{relatedOffer.emoji.slice(0, 2)}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate group-hover:text-pink">
+                        {relatedOffer.title}
+                      </p>
+                      <p className="text-xs text-gray-400 truncate">{relatedOffer.description}</p>
+                    </div>
+                  </Link>
+                ))}
               </div>
             </div>
           </div>

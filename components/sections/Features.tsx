@@ -1,9 +1,13 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { features } from '@/lib/data'
+import type { Feature } from '@/lib/data'
 
-export function Features() {
+interface FeaturesProps {
+  features: Feature[]
+}
+
+export function Features({ features }: FeaturesProps) {
   return (
     <section
       aria-labelledby="features-title"

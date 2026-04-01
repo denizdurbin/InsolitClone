@@ -2,10 +2,14 @@
 
 import { motion } from 'framer-motion'
 import { Star } from 'lucide-react'
-import { testimonials } from '@/lib/data'
+import type { Testimonial } from '@/lib/data'
 import { Button } from '@/components/ui/Button'
 
-export function Testimonials() {
+interface TestimonialsProps {
+  testimonials: Testimonial[]
+}
+
+export function Testimonials({ testimonials }: TestimonialsProps) {
   return (
     <section
       aria-labelledby="testimonials-title"

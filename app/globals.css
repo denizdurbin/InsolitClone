@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+@layer base {
+  * { @apply box-border; }
+
+  html { @apply scroll-smooth; }
+
+  body {
+    @apply font-sans antialiased transition-colors duration-300;
+    @apply bg-gray-50 text-gray-900;
+  }
+
+  .dark body {
+    @apply bg-dark-bg text-gray-100;
+  }
+}
+
+@layer components {
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-pink rounded-full; }
+
+  /* Focus visible */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-pink rounded;
+  }
+
+  /* Sr-only */
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0);
+    white-space: nowrap; border: 0;
+  }
+}
+
+@layer utilities {
+  .gradient-brand { background: linear-gradient(135deg, #ff1870 0%, #a855f7 100%); }
+  .gradient-hero-light { background: linear-gradient(160deg, #fff0f5 0%, #f7f7fb 60%, #eef6ff 100%); }
+  .gradient-hero-dark  { background: linear-gradient(160deg, #1a0a14 0%, #0d0d12 60%, #0a0a1a 100%); }
+  .text-gradient {
+    background: linear-gradient(135deg, #ff1870, #a855f7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}

@@ -2,10 +2,13 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import Link from 'next/link'
 import { OfferCard } from '@/components/ui/OfferCard'
 import { Button } from '@/components/ui/Button'
-import { offers, type Category } from '@/lib/data'
+import type { Offer, Category } from '@/lib/data'
+
+interface OffersSectionProps {
+  offers: Offer[]
+}
 
 type Filter = 'all' | Category
 
@@ -18,7 +21,7 @@ const filters: { label: string; value: Filter }[] = [
   { label: '🎬 Cinéma',      value: 'cinema' },
 ]
 
-export function OffersSection() {
+export function OffersSection({ offers }: OffersSectionProps) {
   const [active, setActive] = useState<Filter>('all')
 
   const filtered = active === 'all' ? offers.slice(0, 8) : offers.filter(o => o.category === active)
@@ -39,7 +42,7 @@ export function OffersSection() {
           className="mb-8"
         >
           <h2 id="offers-title" className="text-3xl md:text-4xl font-extrabold tracking-tight mb-6">
-            <span className="text-pink">1 247</span> offres disponibles près de toi
+            <span className="text-pink">{offers.length}</span> offres disponibles près de toi
           </h2>
 
           {/* Filters */}

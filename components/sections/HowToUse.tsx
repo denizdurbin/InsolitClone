@@ -1,10 +1,14 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { steps } from '@/lib/data'
+import type { Step } from '@/lib/data'
 import { ChevronRight } from 'lucide-react'
 
-export function HowToUse() {
+interface HowToUseProps {
+  steps: Step[]
+}
+
+export function HowToUse({ steps }: HowToUseProps) {
   return (
     <section
       aria-labelledby="howto-title"

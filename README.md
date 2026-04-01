@@ -15,6 +15,8 @@ pnpm dev
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your-publishable-key
+SUPABASE_SERVICE_ROLE_KEY=your-role-key
+
 ```
 
 2. Open your Supabase project SQL editor and run these files in order:

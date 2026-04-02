@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ['latin'], display: 'swap' })
 
 export const metadata: Metadata = {
   title: 'Insolit — Les meilleurs bons plans autour de toi',
-  description: 'Des offres exclusives, des activités insolites, des cadeaux — tout près de chez toi.',
+  description: 'Des offres exclusives, des activités insolites, des cadeaux, tout près de chez toi.',
   keywords: ['bons plans', 'offres', 'réductions', 'activités', 'cadeaux', 'restaurants'],
   robots: { index: true, follow: true },
 }

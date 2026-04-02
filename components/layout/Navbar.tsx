@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Menu, X, LogOut, User } from 'lucide-react'
+import { Menu, X, LogOut, User, Shield } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/lib/auth'
@@ -18,6 +18,7 @@ export function Navbar() {
   const [open,     setOpen]     = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [dropdown, setDropdown] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const pathname = usePathname()
   const router   = useRouter()
   const { user, isAuthenticated, logout, loading } = useAuth()
@@ -29,6 +30,25 @@ export function Navbar() {
   }, [])
 
   useEffect(() => { setOpen(false); setDropdown(false) }, [pathname])
+
+  useEffect(() => {
+    if (loading || !isAuthenticated || !user?.email) {
+      setIsAdmin(false)
+      return
+    }
+
+    const controller = new AbortController()
+
+    fetch(`/api/admin/check?email=${encodeURIComponent(user.email)}`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then((res) => res.json())
+      .then((data) => setIsAdmin(Boolean(data?.authorized)))
+      .catch(() => setIsAdmin(false))
+
+    return () => controller.abort()
+  }, [loading, isAuthenticated, user?.email])
 
   // Fermer le dropdown au clic extérieur
   useEffect(() => {
@@ -48,7 +68,7 @@ export function Navbar() {
     <header
       role="banner"
       className={clsx(
-        'sticky top-0 z-50 transition-all duration-300',
+        'sticky top-0 z-[1200] transition-all duration-300',
         'bg-white/90 dark:bg-dark-bg/90 backdrop-blur-md',
         'border-b border-gray-100 dark:border-dark-border',
         scrolled && 'shadow-md'
@@ -114,6 +134,16 @@ export function Navbar() {
                     className="absolute right-0 top-12 w-48 bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-xl shadow-xl overflow-hidden"
                     onClick={e => e.stopPropagation()}
                   >
+                    {isAdmin && (
+                      <Link
+                        href="/admin"
+                        role="menuitem"
+                        className="flex items-center gap-2.5 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-pink/8 hover:text-pink transition-colors"
+                      >
+                        <Shield size={15} aria-hidden="true" />
+                        Admin
+                      </Link>
+                    )}
                     <Link
                       href="/profil"
                       role="menuitem"
@@ -170,6 +200,12 @@ export function Navbar() {
           {!loading && (
             isAuthenticated && user ? (
               <>
+                {isAdmin && (
+                  <Link href="/admin" role="menuitem"
+                    className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-pink/10 hover:text-pink transition-colors">
+                    <Shield size={15} />Admin
+                  </Link>
+                )}
                 <Link href="/profil" role="menuitem"
                   className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-pink/10 hover:text-pink transition-colors">
                   <User size={15} />Mon profil

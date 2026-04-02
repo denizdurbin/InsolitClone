@@ -42,7 +42,7 @@ export function OffersSection({ offers }: OffersSectionProps) {
           className="mb-8"
         >
           <h2 id="offers-title" className="text-3xl md:text-4xl font-extrabold tracking-tight mb-6">
-            <span className="text-pink">{offers.length}</span> offres disponibles près de toi
+            <span className="text-pink">{offers.length}</span> offres disponibles
           </h2>
 
           {/* Filters */}

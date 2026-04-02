@@ -11,7 +11,7 @@ export function Features({ features }: FeaturesProps) {
   return (
     <section
       aria-labelledby="features-title"
-      className="py-24 bg-gray-50 dark:bg-dark-bg"
+      className="relative z-0 py-24 bg-gray-50 dark:bg-dark-bg"
     >
       <div className="max-w-6xl mx-auto px-6">
         <motion.h2

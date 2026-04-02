@@ -7,6 +7,8 @@ type Filter = 'all' | Category
 interface OffresPageProps {
   searchParams?: {
     cat?: string | string[]
+    q?: string | string[]
+    loc?: string | string[]
   }
 }
 
@@ -23,6 +25,15 @@ function normalizeFilter(value: string | string[] | undefined): Filter {
 export default async function OffresPage({ searchParams }: OffresPageProps) {
   const offers = await getOffers()
   const initialFilter = normalizeFilter(searchParams?.cat)
+  const initialSearch = Array.isArray(searchParams?.q) ? searchParams?.q[0] ?? '' : searchParams?.q ?? ''
+  const initialLocation = Array.isArray(searchParams?.loc) ? searchParams?.loc[0] ?? '' : searchParams?.loc ?? ''
 
-  return <OffresClient offers={offers} initialFilter={initialFilter} />
+  return (
+    <OffresClient
+      offers={offers}
+      initialFilter={initialFilter}
+      initialSearch={initialSearch}
+      initialLocation={initialLocation}
+    />
+  )
 }

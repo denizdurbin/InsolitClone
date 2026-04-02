@@ -21,6 +21,7 @@ export default async function ProfilPage() {
         nom: user.nom,
         email: user.email,
         location: user.location,
+        birthDate: user.birthDate,
         savingsCents: user.savingsCents,
         offersUsed: user.offersUsed,
         reviewsCount: user.reviewsCount,

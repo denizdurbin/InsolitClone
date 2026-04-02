@@ -7,7 +7,7 @@ const cols = [
       { label: 'Bons plans',  href: '/offres' },
       { label: 'Activités',   href: '/offres?cat=activite' },
       { label: 'Cadeaux',     href: '/offres?cat=cadeau' },
-      { label: 'Lieux',       href: '/#lieux' },
+      { label: 'Lieux',       href: '/lieux' },
     ],
   },
   {

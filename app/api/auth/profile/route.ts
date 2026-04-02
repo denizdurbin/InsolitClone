@@ -13,13 +13,14 @@ export async function PATCH(request: Request) {
     const currentUser = await getCurrentUserFromCookie()
 
     if (!currentUser) {
-      return NextResponse.json({ message: 'Utilisateur non connecte.' }, { status: 401 })
+      return NextResponse.json({ message: 'Utilisateur non authentifie.' }, { status: 401 })
     }
 
     const body = (await request.json()) as {
       prenom?: string
       nom?: string
       birthDate?: string
+      location?: string
     }
 
     const prenom = body.prenom?.trim() ?? ''
@@ -36,6 +37,10 @@ export async function PATCH(request: Request) {
 
     if (!isAtLeast16YearsOld(birthDate)) {
       return NextResponse.json({ message: 'Ce service est reserve aux 16 ans et plus.' }, { status: 400 })
+    const location = body.location?.trim() ?? ''
+
+    if (!prenom || !nom || !location) {
+      return NextResponse.json({ message: 'Le prenom, le nom et l adresse sont obligatoires.' }, { status: 400 })
     }
 
     const admin = createAdminClient()
@@ -68,6 +73,17 @@ export async function PATCH(request: Request) {
         reviewsCount: data.reviews_count,
       },
     })
+        location: normalizeLocation(location),
+      })
+      .eq('id', currentUser.id)
+      .select('id,prenom,nom,email,location,savings_cents,offers_used,reviews_count,password_hash')
+      .single()
+
+    if (error || !data) {
+      throw new Error('Impossible de mettre a jour le profil.')
+    }
+
+    return NextResponse.json({ user: toClientAuthUser(data as Parameters<typeof toClientAuthUser>[0]) })
   } catch (error) {
     const message = error instanceof Error && error.message === ADMIN_ENV_ERROR_MESSAGE
       ? ADMIN_ENV_ERROR_MESSAGE

@@ -10,48 +10,64 @@ interface MapComponentProps {
   onSelectOffer: (offer: Offer) => void
 }
 
-// Couleur par catégorie
 const categoryColor: Record<string, string> = {
   restaurant: '#ff6b35',
-  activite:   '#a855f7',
-  cadeau:     '#ff1870',
-  sport:      '#00c896',
-  cinema:     '#4a9eff',
+  activite: '#a855f7',
+  cadeau: '#ff1870',
+  sport: '#00c896',
+  cinema: '#4a9eff',
 }
 
-export default function MapComponent({ offers, userPosition, selected, onSelectOffer }: MapComponentProps) {
-  const mapRef    = useRef<HTMLDivElement>(null)
-  const mapObj    = useRef<import('leaflet').Map | null>(null)
+export default function MapComponent({
+  offers,
+  userPosition,
+  selected,
+  onSelectOffer,
+}: MapComponentProps) {
+  const mapRef = useRef<HTMLDivElement>(null)
+  const mapObj = useRef<import('leaflet').Map | null>(null)
   const markersRef = useRef<Map<string, import('leaflet').Marker>>(new Map())
 
   useEffect(() => {
+    let cancelled = false
+
     if (!mapRef.current || mapObj.current) return
 
-    // Import Leaflet côté client uniquement
     import('leaflet').then((L) => {
+      if (cancelled || !mapRef.current || mapObj.current) return
+
+      // Empêche l'erreur "Map container is already initialized"
+      const container = mapRef.current
+      if ((container as HTMLDivElement & { _leaflet_id?: number })._leaflet_id) {
+        return
+      }
+
       // Fix icônes Leaflet avec Next.js
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (L.Icon.Default.prototype as any)._getIconUrl
       L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconRetinaUrl:
+          'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        iconUrl:
+          'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        shadowUrl:
+          'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
       })
 
-      // Initialiser la carte centrée sur Paris par défaut
       const center: [number, number] = userPosition ?? [48.8566, 2.3522]
-      const map = L.map(mapRef.current!, { zoomControl: true, attributionControl: true })
-        .setView(center, userPosition ? 13 : 12)
+
+      const map = L.map(container, {
+        zoomControl: true,
+        attributionControl: true,
+      }).setView(center, userPosition ? 13 : 12)
 
       mapObj.current = map
 
-      // Tuiles OpenStreetMap (gratuites)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
         maxZoom: 19,
       }).addTo(map)
 
-      // Marqueur de position utilisateur
       if (userPosition) {
         const pulsingIcon = L.divIcon({
           className: '',
@@ -67,14 +83,15 @@ export default function MapComponent({ offers, userPosition, selected, onSelectO
           iconSize: [20, 20],
           iconAnchor: [10, 10],
         })
+
         L.marker(userPosition, { icon: pulsingIcon })
           .addTo(map)
           .bindPopup('<strong style="color:#ff1870">📍 Ma position</strong>')
       }
 
-      // Marqueurs des offres
       offers.forEach((offer) => {
         if (!offer.coords) return
+
         const color = categoryColor[offer.category] ?? '#ff1870'
 
         const icon = L.divIcon({
@@ -122,25 +139,31 @@ export default function MapComponent({ offers, userPosition, selected, onSelectO
     })
 
     return () => {
+      cancelled = true
+
       if (mapObj.current) {
         mapObj.current.remove()
         mapObj.current = null
-        markersRef.current.clear()
       }
+
+      if (mapRef.current) {
+        delete (mapRef.current as HTMLDivElement & { _leaflet_id?: number })._leaflet_id
+      }
+
+      markersRef.current.clear()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Centrer sur la position utilisateur quand elle change
   useEffect(() => {
     if (mapObj.current && userPosition) {
       mapObj.current.setView(userPosition, 13, { animate: true })
     }
   }, [userPosition])
 
-  // Ouvrir la popup du marqueur sélectionné
   useEffect(() => {
     if (!selected || !mapObj.current) return
+
     const marker = markersRef.current.get(selected.id)
     if (marker && selected.coords) {
       mapObj.current.setView(selected.coords, 15, { animate: true })

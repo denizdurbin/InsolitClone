@@ -1,6 +1,6 @@
 -- Seed data generated from legacy static dataset in lib/data.ts
 
-TRUNCATE TABLE public.offers, public.features, public.steps, public.testimonials RESTART IDENTITY;
+TRUNCATE TABLE public.offers, public.features, public.steps, public.testimonials, public.reviews RESTART IDENTITY;
 
 INSERT INTO public.offers (
   id,
@@ -120,4 +120,55 @@ ON CONFLICT (id) DO UPDATE SET
   avatar = EXCLUDED.avatar,
   gradient = EXCLUDED.gradient,
   rating = EXCLUDED.rating,
+  text = EXCLUDED.text;
+
+INSERT INTO public.users (
+  id,
+  prenom,
+  nom,
+  email,
+  password_hash,
+  location,
+  birth_date,
+  savings_cents,
+  offers_used,
+  reviews_count
+)
+VALUES
+('11111111-1111-1111-1111-111111111111', 'Sophie', 'Lemoine', 'sophie.demo@insolit.dev', NULL, 'Paris, France', '2006-04-12', 12850, 6, 2),
+('22222222-2222-2222-2222-222222222222', 'Thomas', 'Martin', 'thomas.demo@insolit.dev', NULL, 'Lyon, France', '2005-11-03', 8420, 4, 1),
+('33333333-3333-3333-3333-333333333333', 'Amina', 'Benali', 'amina.demo@insolit.dev', NULL, 'Marseille, France', '2007-02-18', 19000, 8, 3)
+ON CONFLICT (id) DO UPDATE SET
+  prenom = EXCLUDED.prenom,
+  nom = EXCLUDED.nom,
+  email = EXCLUDED.email,
+  location = EXCLUDED.location,
+  birth_date = EXCLUDED.birth_date,
+  savings_cents = EXCLUDED.savings_cents,
+  offers_used = EXCLUDED.offers_used,
+  reviews_count = EXCLUDED.reviews_count;
+
+INSERT INTO public.reviews (
+  id,
+  user_id,
+  user_name_snapshot,
+  user_email_snapshot,
+  offer_id,
+  offer_title_snapshot,
+  rating,
+  title,
+  text
+)
+VALUES
+(1, '11111111-1111-1111-1111-111111111111', 'Sophie Lemoine', 'sophie.demo@insolit.dev', 'kfc-villiers', 'KFC Villiers-sur-Marne', 5, 'Très bon plan', 'Super offre, le burger était délicieux et le service rapide.'),
+(2, '22222222-2222-2222-2222-222222222222', 'Thomas Martin', 'thomas.demo@insolit.dev', 'escape-game', 'Escape Game Paris', 4, 'Expérience top', 'Très bonne expérience, je recommande pour une sortie entre amis.'),
+(3, '33333333-3333-3333-3333-333333333333', 'Amina Benali', 'amina.demo@insolit.dev', 'cinema-gaumont', 'Cinéma Gaumont', 4, 'Parfait pour le prix', 'La place à 5€ est vraiment intéressante, facile à utiliser.')
+ON CONFLICT (id) DO UPDATE SET
+  user_id = EXCLUDED.user_id,
+  user_name_snapshot = EXCLUDED.user_name_snapshot,
+  user_email_snapshot = EXCLUDED.user_email_snapshot,
+  offer_id = EXCLUDED.offer_id,
+  offer_title_snapshot = EXCLUDED.offer_title_snapshot,
+  rating = EXCLUDED.rating,
+  title = EXCLUDED.title,
   text = EXCLUDED.text;

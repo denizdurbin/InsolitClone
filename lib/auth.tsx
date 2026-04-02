@@ -8,6 +8,7 @@ interface ApiUser {
   nom: string
   email: string
   location: string
+  birthDate: string | null
   savingsCents: number
   offersUsed: number
   reviewsCount: number
@@ -20,6 +21,7 @@ interface User {
   email: string
   initials: string
   location: string
+  birthDate: string | null
   savingsCents: number
   offersUsed: number
   reviewsCount: number
@@ -61,6 +63,7 @@ function mapApiUserToUser(data: ApiUser): User {
     email: data.email,
     initials: getInitials(data.prenom, data.nom, data.email),
     location: data.location,
+    birthDate: data.birthDate,
     savingsCents: data.savingsCents,
     offersUsed: data.offersUsed,
     reviewsCount: data.reviewsCount,

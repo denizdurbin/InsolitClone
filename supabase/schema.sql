@@ -65,6 +65,20 @@ CREATE TABLE IF NOT EXISTS public.testimonials (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS public.reviews (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID REFERENCES public.users (id) ON DELETE SET NULL,
+  user_name_snapshot TEXT NOT NULL,
+  user_email_snapshot TEXT NOT NULL,
+  offer_id TEXT REFERENCES public.offers (id) ON DELETE SET NULL,
+  offer_title_snapshot TEXT NOT NULL,
+  rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  title TEXT NOT NULL,
+  text TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY,
   prenom TEXT NOT NULL,
@@ -72,6 +86,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT,
   location TEXT NOT NULL DEFAULT 'Paris, Ile-de-France',
+  birth_date DATE,
   savings_cents INTEGER NOT NULL DEFAULT 0 CHECK (savings_cents >= 0),
   offers_used INTEGER NOT NULL DEFAULT 0 CHECK (offers_used >= 0),
   reviews_count INTEGER NOT NULL DEFAULT 0 CHECK (reviews_count >= 0),
@@ -81,6 +96,16 @@ CREATE TABLE IF NOT EXISTS public.users (
 
 ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_id_fkey;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS birth_date DATE;
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_birth_date_under_26;
+ALTER TABLE public.users
+  ADD CONSTRAINT users_birth_date_under_16 CHECK (
+    birth_date IS NULL
+    OR (
+      birth_date <= CURRENT_DATE
+      AND birth_date <= (CURRENT_DATE - INTERVAL '16 years')::DATE
+    )
+  );
 
 CREATE TABLE IF NOT EXISTS public.user_sessions (
   token_hash TEXT PRIMARY KEY,
@@ -115,6 +140,9 @@ CREATE INDEX IF NOT EXISTS offers_sort_order_idx ON public.offers (sort_order);
 CREATE INDEX IF NOT EXISTS features_sort_order_idx ON public.features (sort_order);
 CREATE INDEX IF NOT EXISTS steps_sort_order_idx ON public.steps (sort_order);
 CREATE INDEX IF NOT EXISTS testimonials_sort_order_idx ON public.testimonials (sort_order);
+CREATE INDEX IF NOT EXISTS reviews_user_id_idx ON public.reviews (user_id);
+CREATE INDEX IF NOT EXISTS reviews_offer_id_idx ON public.reviews (offer_id);
+CREATE INDEX IF NOT EXISTS reviews_created_at_idx ON public.reviews (created_at DESC);
 CREATE INDEX IF NOT EXISTS user_sessions_user_id_idx ON public.user_sessions (user_id);
 CREATE INDEX IF NOT EXISTS user_sessions_expires_at_idx ON public.user_sessions (expires_at);
 
@@ -122,6 +150,7 @@ ALTER TABLE public.offers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.features ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.testimonials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_sessions ENABLE ROW LEVEL SECURITY;
 
@@ -136,6 +165,9 @@ CREATE POLICY "Public read steps" ON public.steps FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Public read testimonials" ON public.testimonials;
 CREATE POLICY "Public read testimonials" ON public.testimonials FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read reviews" ON public.reviews;
+CREATE POLICY "Public read reviews" ON public.reviews FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Users read own profile" ON public.users;
 DROP POLICY IF EXISTS "Users insert own profile" ON public.users;

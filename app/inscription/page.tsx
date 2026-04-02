@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, Mail, Lock, User, MapPin, AlertCircle, CheckCircle } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, User, MapPin, AlertCircle, CheckCircle, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/lib/auth'
 
@@ -64,6 +65,13 @@ function PasswordStrength({ password }: { password: string }) {
   )
 }
 
+function getMaxBirthDate(minAge: number) {
+  const now = new Date()
+  const cutoff = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - minAge)
+  return cutoff.toISOString().slice(0, 10)
+}
+
 interface FieldProps {
   id: string
   label: string
@@ -75,6 +83,7 @@ interface FieldProps {
   placeholder: string
   autoComplete: string
   extra?: React.ReactNode
+  inputProps?: React.InputHTMLAttributes<HTMLInputElement>
 }
 
 function Field({
@@ -88,6 +97,7 @@ function Field({
   placeholder,
   autoComplete,
   extra,
+  inputProps,
 }: FieldProps) {
   return (
     <div>
@@ -98,6 +108,7 @@ function Field({
           id={id} type={type} autoComplete={autoComplete} value={value} placeholder={placeholder}
           onChange={e => onChange(e.target.value)}
           aria-invalid={!!error} aria-describedby={error ? `${id}-error` : undefined}
+          {...inputProps}
           className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm text-gray-900 dark:text-white placeholder:text-gray-400 outline-none transition-colors bg-gray-50 dark:bg-dark-alt
             ${error ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-dark-border focus:border-pink focus:ring-1 focus:ring-pink'}`}
         />
@@ -111,7 +122,7 @@ function Field({
 export default function InscriptionPage() {
   const router = useRouter()
   const { setAuthenticatedUser } = useAuth()
-  const [form, setForm] = useState({ prenom: '', nom: '', location: '', email: '', password: '', confirm: '', cgu: false })
+  const [form, setForm] = useState({ prenom: '', nom: '', location: '', birthDate: '', email: '', password: '', confirm: '' })
   const [showPass,  setShowPass]  = useState(false)
   const [showConf,  setShowConf]  = useState(false)
   const [loading,   setLoading]   = useState(false)
@@ -119,6 +130,12 @@ export default function InscriptionPage() {
   const [submitError, setSubmitError] = useState('')
   const [submitNotice, setSubmitNotice] = useState('')
   const [cityOptions, setCityOptions] = useState<string[]>([])
+  const [isCityMenuOpen, setIsCityMenuOpen] = useState(false)
+  const [isClient, setIsClient] = useState(false)
+  const cityInputRef = useRef<HTMLInputElement>(null)
+  const openScrollYRef = useRef(0)
+  const [cityMenuPos, setCityMenuPos] = useState({ top: 0, left: 0, width: 0 })
+  const birthDateMax = getMaxBirthDate(16)
 
   const set = (k: string, v: string | boolean) => {
     setForm(prev => ({ ...prev, [k]: v }))
@@ -126,6 +143,10 @@ export default function InscriptionPage() {
     setSubmitError('')
     setSubmitNotice('')
   }
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   useEffect(() => {
     const query = form.location.trim()
@@ -174,15 +195,66 @@ export default function InscriptionPage() {
     }
   }, [form.location])
 
+  useEffect(() => {
+    if (!isCityMenuOpen) return
+
+    const updateMenuPosition = () => {
+      if (!cityInputRef.current) return
+      const rect = cityInputRef.current.getBoundingClientRect()
+      setCityMenuPos({
+        top: rect.bottom + 10,
+        left: rect.left,
+        width: rect.width,
+      })
+    }
+
+    updateMenuPosition()
+    window.addEventListener('resize', updateMenuPosition)
+
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition)
+    }
+  }, [isCityMenuOpen, form.location])
+
+  useEffect(() => {
+    if (!isCityMenuOpen) return
+
+    openScrollYRef.current = window.scrollY
+
+    const closeOnSwipeOrScroll = () => {
+      if (Math.abs(window.scrollY - openScrollYRef.current) > 20) {
+        setIsCityMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('scroll', closeOnSwipeOrScroll, { passive: true })
+    return () => window.removeEventListener('scroll', closeOnSwipeOrScroll)
+  }, [isCityMenuOpen])
+
   const validate = () => {
     const e: Record<string, string> = {}
     if (!form.prenom.trim())   e.prenom   = 'Prénom requis'
     if (!form.nom.trim())      e.nom      = 'Nom requis'
     if (!form.location.trim()) e.location = 'Adresse requise'
+    if (!form.birthDate) e.birthDate = 'Date de naissance requise'
     if (!form.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) e.email = 'E-mail invalide'
     if (form.password.length < 8) e.password = 'Mot de passe trop court (8 car. min)'
     if (form.password !== form.confirm) e.confirm = 'Les mots de passe ne correspondent pas'
-    if (!form.cgu) e.cgu = "Tu dois accepter les CGU pour continuer"
+
+    if (form.birthDate) {
+      const birth = new Date(`${form.birthDate}T00:00:00.000Z`)
+      const now = new Date()
+      const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+      const cutoff = new Date(today)
+      cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 16)
+
+      if (Number.isNaN(birth.getTime()) || birth > today) {
+        e.birthDate = 'Date de naissance invalide'
+      } else if (birth > cutoff) {
+        e.birthDate = 'Inscription reservee aux 16 ans et plus'
+      }
+    }
+
     return e
   }
 
@@ -207,6 +279,7 @@ export default function InscriptionPage() {
         prenom: form.prenom.trim(),
         nom: form.nom.trim(),
         location: form.location.trim(),
+        birthDate: form.birthDate,
         email: normalizedEmail,
         password: form.password,
       }),
@@ -220,6 +293,7 @@ export default function InscriptionPage() {
         nom: string
         email: string
         location: string
+        birthDate: string | null
         savingsCents: number
         offersUsed: number
         reviewsCount: number
@@ -247,15 +321,12 @@ export default function InscriptionPage() {
 
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 font-black text-2xl tracking-tight">
-            <span className="text-pink text-3xl">◎</span>
-            <span className="text-gray-900 dark:text-white">insolit</span>
-          </Link>
+
           <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white mt-4 mb-1">
             Crée ton compte gratuit
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Rejoins +28k utilisateurs et profite plus dès aujourd&apos;hui
+            Rejoins les autres utilisateurs et profite plus dès aujourd&apos;hui
           </p>
         </div>
 
@@ -275,28 +346,31 @@ export default function InscriptionPage() {
 
             {/* Adresse */}
             <div>
-              <label htmlFor="location" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Adresse (ville)</label>
+              <label htmlFor="location" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Ville de résidence</label>
               <div className="relative">
                 <MapPin size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
                 <input
+                  ref={cityInputRef}
                   id="location"
                   type="text"
                   autoComplete="address-level2"
                   value={form.location}
-                  list="france-cities-list"
                   placeholder="Ex: Lyon, France"
-                  onChange={(e) => set('location', e.target.value)}
+                  onChange={(e) => {
+                    set('location', e.target.value)
+                    setIsCityMenuOpen(true)
+                  }}
+                  onFocus={() => setIsCityMenuOpen(true)}
+                  onBlur={() => setTimeout(() => setIsCityMenuOpen(false), 120)}
+                  aria-autocomplete="list"
+                  aria-expanded={isCityMenuOpen && cityOptions.length > 0}
+                  aria-controls="city-autocomplete-list"
                   aria-invalid={!!errors.location}
                   aria-describedby={errors.location ? 'location-error' : 'location-help'}
                   className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm text-gray-900 dark:text-white placeholder:text-gray-400 outline-none transition-colors bg-gray-50 dark:bg-dark-alt
                     ${errors.location ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-dark-border focus:border-pink focus:ring-1 focus:ring-pink'}`}
                 />
               </div>
-              <datalist id="france-cities-list">
-                {cityOptions.map((city) => (
-                  <option key={city} value={city} />
-                ))}
-              </datalist>
               {errors.location && <p id="location-error" role="alert" className="flex items-center gap-1 text-xs text-red-500 mt-1"><AlertCircle size={11} />{errors.location}</p>}
             </div>
 
@@ -304,6 +378,20 @@ export default function InscriptionPage() {
             <Field id="email" label="Adresse e-mail" type="email" icon={Mail}
               value={form.email} onChange={v => set('email', v)} error={errors.email}
               placeholder="toi@exemple.com" autoComplete="email" />
+
+            {/* Date de naissance */}
+            <Field
+              id="birthDate"
+              label="Date de naissance"
+              type="date"
+              icon={Calendar}
+              value={form.birthDate}
+              onChange={v => set('birthDate', v)}
+              error={errors.birthDate}
+              placeholder=""
+              autoComplete="bday"
+              inputProps={{ max: birthDateMax }}
+            />
 
             {/* Password */}
             <div>
@@ -350,26 +438,6 @@ export default function InscriptionPage() {
               {errors.confirm && <p role="alert" className="flex items-center gap-1 text-xs text-red-500 mt-1"><AlertCircle size={11} />{errors.confirm}</p>}
             </div>
 
-            {/* CGU */}
-            <div>
-              <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={form.cgu}
-                  onChange={e => set('cgu', e.target.checked)}
-                  aria-invalid={!!errors.cgu}
-                  className="w-4 h-4 mt-0.5 rounded border-gray-300 accent-pink flex-shrink-0"
-                />
-                <span className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-                  J&apos;accepte les{' '}
-                  <Link href="#" className="text-pink hover:underline font-medium">Conditions Générales d&apos;Utilisation</Link>{' '}
-                  et la{' '}
-                  <Link href="#" className="text-pink hover:underline font-medium">Politique de Confidentialité</Link>
-                </span>
-              </label>
-              {errors.cgu && <p role="alert" className="flex items-center gap-1 text-xs text-red-500 mt-1.5 ml-6"><AlertCircle size={11} />{errors.cgu}</p>}
-            </div>
-
             {/* Submit */}
             <Button type="submit" className="w-full justify-center" size="lg" disabled={loading}>
               {loading ? (
@@ -387,6 +455,39 @@ export default function InscriptionPage() {
           <Link href="/connexion" className="text-pink font-semibold hover:underline">Se connecter</Link>
         </p>
       </div>
+
+      {isClient &&
+        isCityMenuOpen &&
+        cityOptions.length > 0 &&
+        createPortal(
+          <div
+            id="city-autocomplete-list"
+            role="listbox"
+            className="fixed z-[2200] rounded-xl border border-pink/20 dark:border-dark-border bg-white/95 dark:bg-dark-card/95 backdrop-blur-md shadow-[0_12px_35px_rgba(255,24,112,0.2)] overflow-y-auto max-h-64"
+            style={{
+              top: `${cityMenuPos.top}px`,
+              left: `${cityMenuPos.left}px`,
+              width: `${cityMenuPos.width}px`,
+            }}
+          >
+            {cityOptions.map((city) => (
+              <button
+                key={city}
+                type="button"
+                role="option"
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  set('location', city)
+                  setIsCityMenuOpen(false)
+                }}
+                className="w-full px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-pink/10 dark:hover:bg-pink/15 transition-colors"
+              >
+                {city}
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
 
       {(submitError || submitNotice) && (
         <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">

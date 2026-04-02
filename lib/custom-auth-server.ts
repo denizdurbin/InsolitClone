@@ -14,11 +14,17 @@ interface UserRow {
   nom: string
   email: string
   location: string
+  birth_date: string | null
   savings_cents: number
   offers_used: number
   reviews_count: number
   password_hash: string | null
 }
+
+type LegacyUserRow = Omit<UserRow, 'birth_date'>
+
+const USER_SELECT_WITH_BIRTH_DATE = 'id,prenom,nom,email,location,birth_date,savings_cents,offers_used,reviews_count,password_hash'
+const USER_SELECT_LEGACY = 'id,prenom,nom,email,location,savings_cents,offers_used,reviews_count,password_hash'
 
 export interface AuthUser {
   id: string
@@ -26,9 +32,35 @@ export interface AuthUser {
   nom: string
   email: string
   location: string
+  birthDate: string | null
   savingsCents: number
   offersUsed: number
   reviewsCount: number
+}
+
+export function isValidIsoDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+export function isAtLeast16YearsOld(birthDate: string, now = new Date()) {
+  if (!isValidIsoDate(birthDate)) {
+    return false
+  }
+
+  const birth = new Date(`${birthDate}T00:00:00.000Z`)
+  if (Number.isNaN(birth.getTime())) {
+    return false
+  }
+
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  if (birth > today) {
+    return false
+  }
+
+  const cutoff = new Date(today)
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 16)
+
+  return birth <= cutoff
 }
 
 export function getSessionCookieOptions(maxAge = SESSION_DURATION_SECONDS) {
@@ -99,9 +131,30 @@ function mapUserRowToAuthUser(row: UserRow): AuthUser {
     nom: normalizePersonName(row.nom),
     email: row.email,
     location: row.location,
+    birthDate: row.birth_date,
     savingsCents: row.savings_cents,
     offersUsed: row.offers_used,
     reviewsCount: row.reviews_count,
+  }
+}
+
+function isBirthDateMissingColumnError(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const maybeError = error as { code?: string; message?: string }
+  return maybeError.code === '42703' || maybeError.message?.toLowerCase().includes('birth_date') || false
+}
+
+function toUserRow(data: UserRow | LegacyUserRow): UserRow {
+  if ('birth_date' in data) {
+    return data as UserRow
+  }
+
+  return {
+    ...data,
+    birth_date: null,
   }
 }
 
@@ -168,16 +221,31 @@ export async function getCurrentUserFromCookie() {
 
   const { data: userData, error: userError } = await admin
     .from('users')
-    .select('id,prenom,nom,email,location,savings_cents,offers_used,reviews_count,password_hash')
+    .select(USER_SELECT_WITH_BIRTH_DATE)
     .eq('id', session.user_id)
     .maybeSingle()
+
+  if (isBirthDateMissingColumnError(userError)) {
+    const { data: legacyUserData, error: legacyUserError } = await admin
+      .from('users')
+      .select(USER_SELECT_LEGACY)
+      .eq('id', session.user_id)
+      .maybeSingle()
+
+    if (legacyUserError || !legacyUserData) {
+      await admin.from('user_sessions').delete().eq('token_hash', tokenHash)
+      return null
+    }
+
+    return mapUserRowToAuthUser(toUserRow(legacyUserData as LegacyUserRow))
+  }
 
   if (userError || !userData) {
     await admin.from('user_sessions').delete().eq('token_hash', tokenHash)
     return null
   }
 
-  return mapUserRowToAuthUser(userData as UserRow)
+  return mapUserRowToAuthUser(toUserRow(userData as UserRow))
 }
 
 export async function findUserByEmail(email: string) {
@@ -186,21 +254,36 @@ export async function findUserByEmail(email: string) {
 
   const { data, error } = await admin
     .from('users')
-    .select('id,prenom,nom,email,location,savings_cents,offers_used,reviews_count,password_hash')
+    .select(USER_SELECT_WITH_BIRTH_DATE)
     .eq('email', normalizedEmail)
     .maybeSingle()
+
+  if (isBirthDateMissingColumnError(error)) {
+    const { data: legacyData, error: legacyError } = await admin
+      .from('users')
+      .select(USER_SELECT_LEGACY)
+      .eq('email', normalizedEmail)
+      .maybeSingle()
+
+    if (legacyError) {
+      throw new Error('Erreur lors de la recherche utilisateur.')
+    }
+
+    return legacyData ? toUserRow(legacyData as LegacyUserRow) : null
+  }
 
   if (error) {
     throw new Error('Erreur lors de la recherche utilisateur.')
   }
 
-  return (data as UserRow | null) ?? null
+  return data ? toUserRow(data as UserRow) : null
 }
 
 export async function createUser(params: {
   prenom: string
   nom: string
   location: string
+  birthDate: string
   email: string
   passwordHash: string
 }) {
@@ -213,14 +296,44 @@ export async function createUser(params: {
       prenom: normalizePersonName(params.prenom),
       nom: normalizePersonName(params.nom),
       location: normalizeLocation(params.location),
+      birth_date: params.birthDate,
       email: normalizeEmail(params.email),
       password_hash: params.passwordHash,
     })
-    .select('id,prenom,nom,email,location,savings_cents,offers_used,reviews_count,password_hash')
+    .select('id,prenom,nom,email,location,birth_date,savings_cents,offers_used,reviews_count,password_hash')
     .single()
 
   if (error || !data) {
     throw new Error('Impossible de creer le compte.')
+  }
+
+  return data as UserRow
+}
+
+export async function createOAuthUser(params: {
+  email: string
+  prenom: string
+  nom: string
+  location?: string
+}) {
+  const admin = createAdminClient()
+
+  const { data, error } = await admin
+    .from('users')
+    .insert({
+      id: createUserId(),
+      prenom: normalizePersonName(params.prenom),
+      nom: normalizePersonName(params.nom),
+      location: normalizeLocation(params.location ?? 'Paris, Ile-de-France'),
+      email: normalizeEmail(params.email),
+      password_hash: null,
+      birth_date: null,
+    })
+    .select('id,prenom,nom,email,location,birth_date,savings_cents,offers_used,reviews_count,password_hash')
+    .single()
+
+  if (error || !data) {
+    throw new Error('Impossible de creer le compte OAuth.')
   }
 
   return data as UserRow

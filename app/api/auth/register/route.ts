@@ -7,6 +7,8 @@ import {
   findUserByEmail,
   getSessionCookieOptions,
   hashPassword,
+  isAtLeast16YearsOld,
+  isValidIsoDate,
   normalizeEmail,
   toClientAuthUser,
 } from '@/lib/custom-auth-server'
@@ -19,6 +21,7 @@ export async function POST(request: Request) {
       prenom?: string
       nom?: string
       location?: string
+      birthDate?: string
       email?: string
       password?: string
     }
@@ -26,11 +29,20 @@ export async function POST(request: Request) {
     const prenom = body.prenom?.trim() ?? ''
     const nom = body.nom?.trim() ?? ''
     const location = body.location?.trim() ?? ''
+    const birthDate = body.birthDate?.trim() ?? ''
     const email = normalizeEmail(body.email ?? '')
     const password = body.password ?? ''
 
-    if (!prenom || !nom || !location || !email || !password) {
+    if (!prenom || !nom || !location || !birthDate || !email || !password) {
       return NextResponse.json({ message: 'Merci de remplir tous les champs.' }, { status: 400 })
+    }
+
+    if (!isValidIsoDate(birthDate)) {
+      return NextResponse.json({ message: 'Date de naissance invalide.' }, { status: 400 })
+    }
+
+    if (!isAtLeast16YearsOld(birthDate)) {
+      return NextResponse.json({ message: 'Inscription reservee aux 16 ans et plus.' }, { status: 400 })
     }
 
     if (!emailRegex.test(email)) {
@@ -50,6 +62,7 @@ export async function POST(request: Request) {
       prenom,
       nom,
       location,
+      birthDate,
       email,
       passwordHash: hashPassword(password),
     })

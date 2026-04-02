@@ -29,22 +29,14 @@ const categoryColor: Record<string, string> = {
   cinema: 'bg-blue',
 }
 
-const categoryEmoji: Record<string, string> = {
-  restaurant: '🍔',
-  activite: '🎯',
-  cadeau: '🎁',
-  sport: '🏋️',
-  cinema: '🎬',
-}
-
 interface LieuxClientProps {
   offers: Offer[]
 }
 
 export default function LieuxClient({ offers }: LieuxClientProps) {
-  const offersWithCoords = useMemo(() => offers.filter((offer) => offer.coords), [offers])
+  const offersWithLocation = useMemo(() => offers.filter((offer) => offer.coords || offer.address), [offers])
 
-  const [selected, setSelected] = useState<Offer | null>(offersWithCoords[0] ?? null)
+  const [selected, setSelected] = useState<Offer | null>(offersWithLocation[0] ?? null)
   const [search, setSearch] = useState('')
   const [userPosition, setUserPosition] = useState<[number, number] | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
@@ -61,7 +53,10 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
   }
 
   function requestGeolocation() {
+    console.log('[Lieux] geolocation request started')
+
     if (!('geolocation' in navigator)) {
+      console.log('[Lieux] geolocation unsupported')
       setGeoStatus('error')
       return
     }
@@ -71,11 +66,16 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const coords: [number, number] = [position.coords.latitude, position.coords.longitude]
+        console.log('[Lieux] geolocation success', {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        })
         setUserPosition(coords)
         setGeoStatus('success')
 
         const nextDistances: Record<string, string> = {}
-        offersWithCoords.forEach((offer) => {
+        offersWithLocation.forEach((offer) => {
           if (!offer.coords) {
             return
           }
@@ -86,6 +86,10 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
         setDistances(nextDistances)
       },
       (error) => {
+        console.log('[Lieux] geolocation error', {
+          code: error.code,
+          message: error.message,
+        })
         setGeoStatus(error.code === error.PERMISSION_DENIED ? 'denied' : 'error')
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -95,10 +99,10 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
   const filtered = useMemo(() => {
     const query = search.toLowerCase()
 
-    return offersWithCoords.filter(
+    return offersWithLocation.filter(
       (offer) => !query || offer.title.toLowerCase().includes(query) || offer.categoryLabel.toLowerCase().includes(query)
     )
-  }, [offersWithCoords, search])
+  }, [offersWithLocation, search])
 
   const sorted = useMemo(() => {
     if (!userPosition || Object.keys(distances).length === 0) {
@@ -116,11 +120,6 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, userPosition, distances])
-
-  useEffect(() => {
-    requestGeolocation()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     if (!selected && sorted.length > 0) {
@@ -177,7 +176,7 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
               : geoStatus === 'success'
                 ? 'Localisé ✓'
                 : geoStatus === 'denied'
-                  ? 'Accès refusé'
+                  ? 'Réessayer'
                   : geoStatus === 'error'
                     ? 'Erreur GPS'
                     : 'Me localiser'}
@@ -185,7 +184,7 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
 
           {geoStatus === 'denied' && (
             <p className="text-xs text-red-400 w-full">
-              Autorise la localisation dans ton navigateur pour voir les offres près de toi.
+              Autorise la localisation dans les réglages du site puis reclique sur le bouton.
             </p>
           )}
           {geoStatus === 'success' && (
@@ -196,96 +195,59 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
 
       <div className="flex flex-col md:flex-row flex-1 overflow-hidden max-w-6xl mx-auto w-full px-6 py-4 gap-4">
         <div className="w-full md:w-72 flex-shrink-0 overflow-y-auto space-y-1.5 pb-2">
-          {sorted.map((offer) => {
-            const distance = distances[offer.id] || offer.distance
+            {sorted.map((offer) => {
+                const distance = userPosition ? distances[offer.id] ?? '' : ''
+                const isImage = offer.emoji?.startsWith('http')
 
-            return (
-              <button
-                key={offer.id}
-                onClick={() => setSelected(offer)}
-                className={`
-                  w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-150
-                  ${
-                    selected?.id === offer.id
-                      ? 'bg-pink/8 border-pink/40 shadow-sm'
-                      : 'bg-white dark:bg-dark-card border-gray-100 dark:border-dark-border hover:border-pink/30 hover:bg-pink/4'
-                  }
-                `}
-              >
-                <div
-                  className={`w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-sm bg-gradient-to-br ${offer.gradient} text-white font-bold`}
-                >
-                  {offer.emoji.slice(0, 2)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p
-                    className={`text-xs font-bold truncate ${selected?.id === offer.id ? 'text-pink' : 'text-gray-800 dark:text-gray-100'}`}
-                  >
-                    {offer.title}
-                  </p>
-                  <p className="text-[10px] text-gray-400 truncate">{offer.categoryLabel}</p>
-                </div>
-                {distance && distance !== '—' && (
-                  <div className="flex flex-col items-end flex-shrink-0">
-                    <span className="text-[10px] text-gray-400 font-medium">{distance}</span>
-                    <span className="text-[10px]">{categoryEmoji[offer.category]}</span>
-                  </div>
-                )}
-              </button>
-            )
-          })}
+                return (
+                    <button
+                        key={offer.id}
+                        onClick={() => setSelected(offer)}
+                        className={`
+        w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-150
+        ${
+                            selected?.id === offer.id
+                                ? 'bg-pink/8 border-pink/40 shadow-sm'
+                                : 'bg-white dark:bg-dark-card border-gray-100 dark:border-dark-border hover:border-pink/30 hover:bg-pink/4'
+                        }
+      `}
+                    >
+                        <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100 dark:bg-dark-border border border-gray-100 dark:border-dark-border">
+                            {isImage ? (
+                                <img
+                                    src={offer.emoji}
+                                    alt={offer.title}
+                                    className="w-full h-full object-cover block"
+                                />
+                            ) : (
+                                <div className={`w-full h-full flex items-center justify-center text-base bg-gradient-to-br ${offer.gradient} text-white font-bold`}>
+                                    {offer.emoji.slice(0, 2)}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                            <p
+                                className={`text-xs font-bold truncate ${selected?.id === offer.id ? 'text-pink' : 'text-gray-800 dark:text-gray-100'}`}
+                            >
+                                {offer.title}
+                            </p>
+                            <p className="text-[10px] text-gray-400 truncate">{offer.categoryLabel}</p>
+                        </div>
+
+                        {distance && (
+                            <div className="flex flex-col items-end flex-shrink-0">
+                                <span className="text-[10px] text-gray-400 font-medium">{distance}</span>
+                            </div>
+                        )}
+                    </button>
+                )
+            })}
         </div>
 
         <div className="flex-1 min-h-[400px] md:min-h-0 relative">
           <MapComponent offers={sorted} userPosition={userPosition} selected={selected} onSelectOffer={setSelected} />
 
-          <div className="absolute bottom-3 left-3 bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-xl px-3 py-2 shadow-md z-[400]">
-            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Légende</p>
-            <div className="flex flex-col gap-1">
-              {Object.entries(categoryColor).map(([category, color]) => (
-                <div key={category} className="flex items-center gap-1.5">
-                  <div className={`w-2.5 h-2.5 rounded-full ${color}`} />
-                  <span className="text-[10px] text-gray-600 dark:text-gray-400 capitalize">
-                    {category === 'activite' ? 'Activité' : category.charAt(0).toUpperCase() + category.slice(1)}
-                  </span>
-                </div>
-              ))}
-              {userPosition && (
-                <div className="flex items-center gap-1.5 mt-1 pt-1 border-t border-gray-100 dark:border-dark-border">
-                  <div className="w-2.5 h-2.5 rounded-full bg-pink ring-2 ring-pink/30" />
-                  <span className="text-[10px] text-pink font-semibold">Ma position</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {selected && (
-            <div className="absolute top-3 right-3 w-64 bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl shadow-xl overflow-hidden z-[400]">
-              <div
-                className={`h-16 bg-gradient-to-br ${selected.gradient} flex items-center justify-center text-white text-2xl font-black`}
-              >
-                {selected.emoji}
-              </div>
-              <div className="p-4">
-                <span className="text-[10px] font-bold text-pink uppercase tracking-widest">{selected.categoryLabel}</span>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white mt-0.5 mb-1 leading-tight">{selected.title}</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{selected.description}</p>
-                {selected.address && (
-                  <p className="text-[10px] text-gray-400 flex items-start gap-1 mb-3">
-                    <MapPin size={10} className="flex-shrink-0 mt-0.5" />
-                    {selected.address}
-                  </p>
-                )}
-                {distances[selected.id] && <p className="text-xs text-pink font-semibold mb-2">📍 {distances[selected.id]} de toi</p>}
-                <Link
-                  href={`/offres/${selected.id}`}
-                  className="block w-full text-center bg-pink text-white text-xs font-bold py-2.5 rounded-xl hover:bg-pink-dark transition-colors"
-                >
-                  Voir l&apos;offre →
-                </Link>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

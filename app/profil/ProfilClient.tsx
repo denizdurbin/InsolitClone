@@ -16,19 +16,43 @@ const badges = [
   { emoji: '⭐', label: 'Top avis', color: 'from-blue-400 to-teal-400' },
 ]
 
-interface ProfileData {
-  prenom: string
-  nom: string
-  email: string
-  location: string
-  savingsCents: number
-  offersUsed: number
-  reviewsCount: number
-}
-
 interface ProfilClientProps {
   recentPurchases: Offer[]
-  profile: ProfileData
+  profile: {
+    prenom: string
+    nom: string
+    email: string
+    location: string
+    birthDate: string | null
+    savingsCents: number
+    offersUsed: number
+    reviewsCount: number
+  }
+}
+
+function isAtLeast16YearsOld(birthDate: string) {
+  const birth = new Date(`${birthDate}T00:00:00.000Z`)
+  if (Number.isNaN(birth.getTime())) return false
+
+  const now = new Date()
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const cutoff = new Date(today)
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 16)
+
+  return birth <= today && birth <= cutoff
+}
+
+function formatBirthDate(value: string | null) {
+  if (!value) return 'Non renseignee'
+
+  const date = new Date(`${value}T00:00:00.000Z`)
+  if (Number.isNaN(date.getTime())) return 'Non renseignee'
+
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(date)
 }
 
 function formatMoney(cents: number) {
@@ -40,114 +64,61 @@ function formatMoney(cents: number) {
   }).format(cents / 100)
 }
 
+function getMaxBirthDate(minAge: number) {
+  const now = new Date()
+  const cutoff = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - minAge)
+  return cutoff.toISOString().slice(0, 10)
+}
+
 export default function ProfilClient({ recentPurchases, profile }: ProfilClientProps) {
   const router = useRouter()
   const { setAuthenticatedUser } = useAuth()
   const [isDeletingAccount, setIsDeletingAccount] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [pendingDeleteAccount, setPendingDeleteAccount] = useState(false)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
-  const [profileError, setProfileError] = useState<string | null>(null)
-  const [cityOptions, setCityOptions] = useState<string[]>([])
-  const [displayProfile, setDisplayProfile] = useState<ProfileData>(profile)
-  const [editableProfile, setEditableProfile] = useState(() => ({
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
+  const [profileForm, setProfileForm] = useState({
     prenom: profile.prenom,
     nom: profile.nom,
-    location: profile.location,
-  }))
+    birthDate: profile.birthDate ?? '',
+  })
+  const birthDateMax = getMaxBirthDate(16)
 
-  useEffect(() => {
-    if (!isEditingProfile) {
-      setCityOptions([])
+  const resetProfileForm = () => {
+    setProfileForm({
+      prenom: profile.prenom,
+      nom: profile.nom,
+      birthDate: profile.birthDate ?? '',
+    })
+  }
+
+  const initials = `${profile.prenom[0] ?? ''}${profile.nom[0] ?? ''}`.trim().toUpperCase() || (profile.email[0] ?? 'U').toUpperCase()
+  const fullName = `${profile.prenom} ${profile.nom}`.trim() || 'Utilisateur'
+
+  const handleSaveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setSaveError(null)
+    setSaveSuccess(null)
+
+    const prenom = profileForm.prenom.trim()
+    const nom = profileForm.nom.trim()
+    const birthDate = profileForm.birthDate
+
+    if (!prenom || !nom || !birthDate) {
+      setSaveError('Merci de remplir tous les champs du profil.')
       return
     }
 
-    const query = editableProfile.location.trim()
-
-    if (query.length < 2) {
-      setCityOptions([])
-      return
-    }
-
-    const controller = new AbortController()
-    const timeout = window.setTimeout(async () => {
-      try {
-        const response = await fetch(
-          `https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(query)}&fields=nom,codeDepartement&boost=population&limit=12`,
-          {
-            signal: controller.signal,
-          }
-        )
-
-        if (!response.ok) {
-          setCityOptions([])
-          return
-        }
-
-        const data = (await response.json()) as Array<{ nom: string; codeDepartement?: string }>
-        const options = Array.from(
-          new Set(
-            data.map((city) =>
-              city.codeDepartement ? `${city.nom}, France (${city.codeDepartement})` : `${city.nom}, France`
-            )
-          )
-        )
-
-        setCityOptions(options)
-      } catch {
-        if (!controller.signal.aborted) {
-          setCityOptions([])
-        }
-      }
-    }, 250)
-
-    return () => {
-      controller.abort()
-      window.clearTimeout(timeout)
-    }
-  }, [editableProfile.location, isEditingProfile])
-
-  const initials = `${displayProfile.prenom[0] ?? ''}${displayProfile.nom[0] ?? ''}`.trim().toUpperCase() || (displayProfile.email[0] ?? 'U').toUpperCase()
-  const fullName = `${displayProfile.prenom} ${displayProfile.nom}`.trim() || 'Utilisateur'
-
-  const setEditableField = (field: 'prenom' | 'nom' | 'location', value: string) => {
-    setEditableProfile((prev) => ({ ...prev, [field]: value }))
-    setProfileError(null)
-  }
-
-  const handleStartProfileEdition = () => {
-    setEditableProfile({
-      prenom: displayProfile.prenom,
-      nom: displayProfile.nom,
-      location: displayProfile.location,
-    })
-    setProfileError(null)
-    setIsEditingProfile(true)
-  }
-
-  const handleCancelProfileEdition = () => {
-    setEditableProfile({
-      prenom: displayProfile.prenom,
-      nom: displayProfile.nom,
-      location: displayProfile.location,
-    })
-    setProfileError(null)
-    setCityOptions([])
-    setIsEditingProfile(false)
-  }
-
-  const handleConfirmProfileEdition = async () => {
-    const prenom = editableProfile.prenom.trim()
-    const nom = editableProfile.nom.trim()
-    const location = editableProfile.location.trim()
-
-    if (!prenom || !nom || !location) {
-      setProfileError('Le prenom, le nom et l adresse sont obligatoires.')
+    if (!isAtLeast16YearsOld(birthDate)) {
+      setSaveError('La date de naissance doit correspondre a un utilisateur de 16 ans ou plus.')
       return
     }
 
     setIsSavingProfile(true)
-    setProfileError(null)
 
     try {
       const response = await fetch('/api/auth/profile', {
@@ -155,51 +126,20 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ prenom, nom, location }),
+        body: JSON.stringify({ prenom, nom, birthDate }),
       })
 
-      const payload = (await response.json().catch(() => null)) as
-        | {
-            message?: string
-            user?: {
-              id: string
-              prenom: string
-              nom: string
-              email: string
-              location: string
-              savingsCents: number
-              offersUsed: number
-              reviewsCount: number
-            }
-          }
-        | null
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null
 
-      if (!response.ok || !payload?.user) {
-        throw new Error(payload?.message ?? 'Impossible de mettre a jour le profil pour le moment.')
+      if (!response.ok) {
+        throw new Error(payload?.message ?? 'Impossible de mettre a jour le profil.')
       }
 
-      const updatedProfile: ProfileData = {
-        prenom: payload.user.prenom,
-        nom: payload.user.nom,
-        email: payload.user.email,
-        location: payload.user.location,
-        savingsCents: payload.user.savingsCents,
-        offersUsed: payload.user.offersUsed,
-        reviewsCount: payload.user.reviewsCount,
-      }
-
-      setDisplayProfile(updatedProfile)
-      setEditableProfile({
-        prenom: payload.user.prenom,
-        nom: payload.user.nom,
-        location: payload.user.location,
-      })
-      setAuthenticatedUser(payload.user)
-      setCityOptions([])
+      setSaveSuccess('Profil mis a jour.')
       setIsEditingProfile(false)
       router.refresh()
     } catch (error) {
-      setProfileError(error instanceof Error ? error.message : 'Impossible de mettre a jour le profil pour le moment.')
+      setSaveError(error instanceof Error ? error.message : 'Impossible de mettre a jour le profil.')
     } finally {
       setIsSavingProfile(false)
     }
@@ -207,11 +147,6 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
 
   const handleDeleteAccount = async () => {
     setDeleteError(null)
-
-    const confirmed = window.confirm('Supprimer votre compte ? Cette action est definitive et supprimera vos donnees de profil.')
-    if (!confirmed) {
-      return
-    }
 
     setIsDeletingAccount(true)
 
@@ -252,100 +187,39 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  {isEditingProfile ? (
-                    <div className="space-y-3 min-w-[260px] sm:min-w-[320px]">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                          Prenom
-                          <input
-                            type="text"
-                            value={editableProfile.prenom}
-                            onChange={(event) => setEditableField('prenom', event.target.value)}
-                            className="mt-1 w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-alt text-sm text-gray-900 dark:text-white outline-none focus:border-pink focus:ring-1 focus:ring-pink"
-                          />
-                        </label>
-                        <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                          Nom
-                          <input
-                            type="text"
-                            value={editableProfile.nom}
-                            onChange={(event) => setEditableField('nom', event.target.value)}
-                            className="mt-1 w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-alt text-sm text-gray-900 dark:text-white outline-none focus:border-pink focus:ring-1 focus:ring-pink"
-                          />
-                        </label>
-                      </div>
-                      <label className="text-xs font-semibold text-gray-600 dark:text-gray-300 block">
-                        Adresse (ville)
-                        <div className="relative mt-1">
-                          <MapPin size={13} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                          <input
-                            type="text"
-                            value={editableProfile.location}
-                            list="profile-france-cities-list"
-                            autoComplete="address-level2"
-                            onChange={(event) => setEditableField('location', event.target.value)}
-                            className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-alt text-sm text-gray-900 dark:text-white outline-none focus:border-pink focus:ring-1 focus:ring-pink"
-                          />
-                        </div>
-                      </label>
-                      <datalist id="profile-france-cities-list">
-                        {cityOptions.map((city) => (
-                          <option key={city} value={city} />
-                        ))}
-                      </datalist>
-                    </div>
-                  ) : (
-                    <>
-                      <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{fullName}</h1>
-                      <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        <MapPin size={13} aria-hidden="true" />
-                        <span>{displayProfile.location}</span>
-                      </div>
-                    </>
-                  )}
+                  <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{fullName}</h1>
+                  <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    <MapPin size={13} aria-hidden="true" />
+                    <span>{profile.location}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Date de naissance: {formatBirthDate(profile.birthDate)}
+                  </p>
                 </div>
                 <div className="flex flex-col items-stretch gap-2 w-full sm:w-auto">
-                  {isEditingProfile ? (
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        className="flex-shrink-0 justify-center"
-                        onClick={handleConfirmProfileEdition}
-                        disabled={isSavingProfile || isDeletingAccount}
-                      >
-                        <Check size={14} aria-hidden="true" />
-                        {isSavingProfile ? 'Enregistrement...' : 'Confirmer'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-shrink-0 justify-center"
-                        onClick={handleCancelProfileEdition}
-                        disabled={isSavingProfile || isDeletingAccount}
-                      >
-                        <X size={14} aria-hidden="true" />
-                        Annuler
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-shrink-0"
-                      disabled={isDeletingAccount}
-                      onClick={handleStartProfileEdition}
-                    >
-                      <Settings size={14} aria-hidden="true" />
-                      Modifier
-                    </Button>
-                  )}
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleDeleteAccount}
+                    className="flex-shrink-0"
                     disabled={isDeletingAccount || isSavingProfile}
-                    className="flex-shrink-0 border-red-200 text-red-600 hover:border-red-500 hover:text-red-700 dark:border-red-900/60 dark:text-red-400 dark:hover:text-red-300"
+                    onClick={() => {
+                      setSaveError(null)
+                      setSaveSuccess(null)
+                      resetProfileForm()
+                      setIsEditingProfile(true)
+                    }}
+                  >
+                    <Settings size={14} aria-hidden="true" />
+                    Modifier le profil
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setDeleteError(null)
+                      setPendingDeleteAccount(true)
+                    }}
+                    disabled={isDeletingAccount}
+                    className="flex-shrink-0"
                   >
                     <Trash2 size={14} aria-hidden="true" />
                     {isDeletingAccount ? 'Suppression...' : 'Supprimer le compte'}
@@ -367,6 +241,66 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
                   </div>
                 ))}
               </div>
+
+              {isEditingProfile && (
+                <form onSubmit={handleSaveProfile} className="mt-5 pt-5 border-t border-gray-100 dark:border-dark-border space-y-3">
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
+                      <label htmlFor="profil-prenom" className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Prenom</label>
+                      <input
+                        id="profil-prenom"
+                        value={profileForm.prenom}
+                        onChange={(event) => setProfileForm((prev) => ({ ...prev, prenom: event.target.value }))}
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-alt text-sm text-gray-900 dark:text-white outline-none focus:border-pink"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="profil-nom" className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Nom</label>
+                      <input
+                        id="profil-nom"
+                        value={profileForm.nom}
+                        onChange={(event) => setProfileForm((prev) => ({ ...prev, nom: event.target.value }))}
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-alt text-sm text-gray-900 dark:text-white outline-none focus:border-pink"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sm:max-w-[240px]">
+                    <label htmlFor="profil-birthdate" className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Date de naissance</label>
+                    <input
+                      id="profil-birthdate"
+                      type="date"
+                      required
+                      max={birthDateMax}
+                      value={profileForm.birthDate}
+                      onChange={(event) => setProfileForm((prev) => ({ ...prev, birthDate: event.target.value }))}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-alt text-sm text-gray-900 dark:text-white outline-none focus:border-pink"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button type="submit" size="sm" disabled={isSavingProfile}>
+                      {isSavingProfile ? 'Enregistrement...' : 'Enregistrer'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSaveError(null)
+                        setSaveSuccess(null)
+                        resetProfileForm()
+                        setIsEditingProfile(false)
+                      }}
+                      disabled={isSavingProfile}
+                    >
+                      Fermer
+                    </Button>
+                    {saveError && <p className="text-xs text-red-600 dark:text-red-400">{saveError}</p>}
+                    {saveSuccess && <p className="text-xs text-green-600 dark:text-green-400">{saveSuccess}</p>}
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </motion.div>
@@ -481,6 +415,49 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
           </motion.section>
         </div>
       </div>
+
+      {pendingDeleteAccount && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-pink/20 dark:border-pink/20 bg-white/95 dark:bg-dark-card/95 p-6 shadow-2xl shadow-pink/10">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-2xl bg-pink/10 p-2.5 text-pink ring-1 ring-pink/15">
+                <Trash2 size={18} aria-hidden="true" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-extrabold tracking-tight text-gray-900 dark:text-white">Supprimer votre compte ?</h3>
+                <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                  Cette action est définitive. Toutes tes données de profil seront supprimées.
+                </p>
+
+                <div className="mt-5 flex items-center justify-end gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPendingDeleteAccount(false)}
+                    disabled={isDeletingAccount}
+                    className="border-gray-200 text-gray-700 hover:border-pink hover:text-pink dark:border-dark-border dark:text-gray-300"
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      setPendingDeleteAccount(false)
+                      void handleDeleteAccount()
+                    }}
+                    disabled={isDeletingAccount}
+                    className=""
+                  >
+                    {isDeletingAccount ? 'Suppression...' : 'Oui, supprimer'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

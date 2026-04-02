@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Star, Heart, Award, MapPin, Settings, Trash2 } from 'lucide-react'
+import { Star, Heart, Award, MapPin, Settings, Trash2, Check, X } from 'lucide-react'
 import type { Offer } from '@/lib/data'
 import { OfferCard } from '@/components/ui/OfferCard'
 import { Button } from '@/components/ui/Button'
+import { useAuth } from '@/lib/auth'
 
 const badges = [
   { emoji: '🏆', label: 'Early adopter', color: 'from-yellow-400 to-orange-400' },
@@ -15,17 +16,19 @@ const badges = [
   { emoji: '⭐', label: 'Top avis', color: 'from-blue-400 to-teal-400' },
 ]
 
+interface ProfileData {
+  prenom: string
+  nom: string
+  email: string
+  location: string
+  savingsCents: number
+  offersUsed: number
+  reviewsCount: number
+}
+
 interface ProfilClientProps {
   recentPurchases: Offer[]
-  profile: {
-    prenom: string
-    nom: string
-    email: string
-    location: string
-    savingsCents: number
-    offersUsed: number
-    reviewsCount: number
-  }
+  profile: ProfileData
 }
 
 function formatMoney(cents: number) {
@@ -39,11 +42,168 @@ function formatMoney(cents: number) {
 
 export default function ProfilClient({ recentPurchases, profile }: ProfilClientProps) {
   const router = useRouter()
+  const { setAuthenticatedUser } = useAuth()
   const [isDeletingAccount, setIsDeletingAccount] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const [cityOptions, setCityOptions] = useState<string[]>([])
+  const [displayProfile, setDisplayProfile] = useState<ProfileData>(profile)
+  const [editableProfile, setEditableProfile] = useState(() => ({
+    prenom: profile.prenom,
+    nom: profile.nom,
+    location: profile.location,
+  }))
 
-  const initials = `${profile.prenom[0] ?? ''}${profile.nom[0] ?? ''}`.trim().toUpperCase() || (profile.email[0] ?? 'U').toUpperCase()
-  const fullName = `${profile.prenom} ${profile.nom}`.trim() || 'Utilisateur'
+  useEffect(() => {
+    if (!isEditingProfile) {
+      setCityOptions([])
+      return
+    }
+
+    const query = editableProfile.location.trim()
+
+    if (query.length < 2) {
+      setCityOptions([])
+      return
+    }
+
+    const controller = new AbortController()
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(query)}&fields=nom,codeDepartement&boost=population&limit=12`,
+          {
+            signal: controller.signal,
+          }
+        )
+
+        if (!response.ok) {
+          setCityOptions([])
+          return
+        }
+
+        const data = (await response.json()) as Array<{ nom: string; codeDepartement?: string }>
+        const options = Array.from(
+          new Set(
+            data.map((city) =>
+              city.codeDepartement ? `${city.nom}, France (${city.codeDepartement})` : `${city.nom}, France`
+            )
+          )
+        )
+
+        setCityOptions(options)
+      } catch {
+        if (!controller.signal.aborted) {
+          setCityOptions([])
+        }
+      }
+    }, 250)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeout)
+    }
+  }, [editableProfile.location, isEditingProfile])
+
+  const initials = `${displayProfile.prenom[0] ?? ''}${displayProfile.nom[0] ?? ''}`.trim().toUpperCase() || (displayProfile.email[0] ?? 'U').toUpperCase()
+  const fullName = `${displayProfile.prenom} ${displayProfile.nom}`.trim() || 'Utilisateur'
+
+  const setEditableField = (field: 'prenom' | 'nom' | 'location', value: string) => {
+    setEditableProfile((prev) => ({ ...prev, [field]: value }))
+    setProfileError(null)
+  }
+
+  const handleStartProfileEdition = () => {
+    setEditableProfile({
+      prenom: displayProfile.prenom,
+      nom: displayProfile.nom,
+      location: displayProfile.location,
+    })
+    setProfileError(null)
+    setIsEditingProfile(true)
+  }
+
+  const handleCancelProfileEdition = () => {
+    setEditableProfile({
+      prenom: displayProfile.prenom,
+      nom: displayProfile.nom,
+      location: displayProfile.location,
+    })
+    setProfileError(null)
+    setCityOptions([])
+    setIsEditingProfile(false)
+  }
+
+  const handleConfirmProfileEdition = async () => {
+    const prenom = editableProfile.prenom.trim()
+    const nom = editableProfile.nom.trim()
+    const location = editableProfile.location.trim()
+
+    if (!prenom || !nom || !location) {
+      setProfileError('Le prenom, le nom et l adresse sont obligatoires.')
+      return
+    }
+
+    setIsSavingProfile(true)
+    setProfileError(null)
+
+    try {
+      const response = await fetch('/api/auth/profile', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prenom, nom, location }),
+      })
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            message?: string
+            user?: {
+              id: string
+              prenom: string
+              nom: string
+              email: string
+              location: string
+              savingsCents: number
+              offersUsed: number
+              reviewsCount: number
+            }
+          }
+        | null
+
+      if (!response.ok || !payload?.user) {
+        throw new Error(payload?.message ?? 'Impossible de mettre a jour le profil pour le moment.')
+      }
+
+      const updatedProfile: ProfileData = {
+        prenom: payload.user.prenom,
+        nom: payload.user.nom,
+        email: payload.user.email,
+        location: payload.user.location,
+        savingsCents: payload.user.savingsCents,
+        offersUsed: payload.user.offersUsed,
+        reviewsCount: payload.user.reviewsCount,
+      }
+
+      setDisplayProfile(updatedProfile)
+      setEditableProfile({
+        prenom: payload.user.prenom,
+        nom: payload.user.nom,
+        location: payload.user.location,
+      })
+      setAuthenticatedUser(payload.user)
+      setCityOptions([])
+      setIsEditingProfile(false)
+      router.refresh()
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : 'Impossible de mettre a jour le profil pour le moment.')
+    } finally {
+      setIsSavingProfile(false)
+    }
+  }
 
   const handleDeleteAccount = async () => {
     setDeleteError(null)
@@ -92,36 +252,114 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{fullName}</h1>
-                  <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    <MapPin size={13} aria-hidden="true" />
-                    <span>{profile.location}</span>
-                  </div>
+                  {isEditingProfile ? (
+                    <div className="space-y-3 min-w-[260px] sm:min-w-[320px]">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                          Prenom
+                          <input
+                            type="text"
+                            value={editableProfile.prenom}
+                            onChange={(event) => setEditableField('prenom', event.target.value)}
+                            className="mt-1 w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-alt text-sm text-gray-900 dark:text-white outline-none focus:border-pink focus:ring-1 focus:ring-pink"
+                          />
+                        </label>
+                        <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                          Nom
+                          <input
+                            type="text"
+                            value={editableProfile.nom}
+                            onChange={(event) => setEditableField('nom', event.target.value)}
+                            className="mt-1 w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-alt text-sm text-gray-900 dark:text-white outline-none focus:border-pink focus:ring-1 focus:ring-pink"
+                          />
+                        </label>
+                      </div>
+                      <label className="text-xs font-semibold text-gray-600 dark:text-gray-300 block">
+                        Adresse (ville)
+                        <div className="relative mt-1">
+                          <MapPin size={13} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                          <input
+                            type="text"
+                            value={editableProfile.location}
+                            list="profile-france-cities-list"
+                            autoComplete="address-level2"
+                            onChange={(event) => setEditableField('location', event.target.value)}
+                            className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-alt text-sm text-gray-900 dark:text-white outline-none focus:border-pink focus:ring-1 focus:ring-pink"
+                          />
+                        </div>
+                      </label>
+                      <datalist id="profile-france-cities-list">
+                        {cityOptions.map((city) => (
+                          <option key={city} value={city} />
+                        ))}
+                      </datalist>
+                    </div>
+                  ) : (
+                    <>
+                      <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{fullName}</h1>
+                      <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        <MapPin size={13} aria-hidden="true" />
+                        <span>{displayProfile.location}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="flex flex-col items-stretch gap-2 w-full sm:w-auto">
-                  <Button variant="outline" size="sm" className="flex-shrink-0" disabled={isDeletingAccount}>
-                    <Settings size={14} aria-hidden="true" />
-                    Modifier le profil
-                  </Button>
+                  {isEditingProfile ? (
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="flex-shrink-0 justify-center"
+                        onClick={handleConfirmProfileEdition}
+                        disabled={isSavingProfile || isDeletingAccount}
+                      >
+                        <Check size={14} aria-hidden="true" />
+                        {isSavingProfile ? 'Enregistrement...' : 'Confirmer'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-shrink-0 justify-center"
+                        onClick={handleCancelProfileEdition}
+                        disabled={isSavingProfile || isDeletingAccount}
+                      >
+                        <X size={14} aria-hidden="true" />
+                        Annuler
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-shrink-0"
+                      disabled={isDeletingAccount}
+                      onClick={handleStartProfileEdition}
+                    >
+                      <Settings size={14} aria-hidden="true" />
+                      Modifier
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleDeleteAccount}
-                    disabled={isDeletingAccount}
+                    disabled={isDeletingAccount || isSavingProfile}
                     className="flex-shrink-0 border-red-200 text-red-600 hover:border-red-500 hover:text-red-700 dark:border-red-900/60 dark:text-red-400 dark:hover:text-red-300"
                   >
                     <Trash2 size={14} aria-hidden="true" />
                     {isDeletingAccount ? 'Suppression...' : 'Supprimer le compte'}
                   </Button>
+                  {profileError && <p className="text-xs text-red-600 dark:text-red-400">{profileError}</p>}
                   {deleteError && <p className="text-xs text-red-600 dark:text-red-400">{deleteError}</p>}
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-6 mt-5 pt-5 border-t border-gray-100 dark:border-dark-border">
                 {[
-                  { label: 'Economies', value: formatMoney(profile.savingsCents) },
-                  { label: 'Offres utilisees', value: String(profile.offersUsed) },
-                  { label: 'Avis laisses', value: String(profile.reviewsCount) },
+                  { label: 'Economies', value: formatMoney(displayProfile.savingsCents) },
+                  { label: 'Offres utilisees', value: String(displayProfile.offersUsed) },
+                  { label: 'Avis laisses', value: String(displayProfile.reviewsCount) },
                 ].map(({ label, value }) => (
                   <div key={label}>
                     <p className="text-xl font-black text-gray-900 dark:text-white">{value}</p>

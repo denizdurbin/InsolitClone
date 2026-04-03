@@ -30,20 +30,20 @@ export default function MapComponent({
 
   useEffect(() => {
     let cancelled = false
+    const container = mapRef.current
+    const markers = markersRef.current
 
-    if (!mapRef.current || mapObj.current) return
+    if (!container || mapObj.current) return
 
     import('leaflet').then((L) => {
-      if (cancelled || !mapRef.current || mapObj.current) return
+      if (cancelled || !container || mapObj.current) return
 
       // Empêche l'erreur "Map container is already initialized"
-      const container = mapRef.current
       if ((container as HTMLDivElement & { _leaflet_id?: number })._leaflet_id) {
         return
       }
 
       // Fix icônes Leaflet avec Next.js
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (L.Icon.Default.prototype as any)._getIconUrl
       L.Icon.Default.mergeOptions({
         iconRetinaUrl:
@@ -146,11 +146,11 @@ export default function MapComponent({
         mapObj.current = null
       }
 
-      if (mapRef.current) {
-        delete (mapRef.current as HTMLDivElement & { _leaflet_id?: number })._leaflet_id
+      if (container) {
+        delete (container as HTMLDivElement & { _leaflet_id?: number })._leaflet_id
       }
 
-      markersRef.current.clear()
+      markers.clear()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

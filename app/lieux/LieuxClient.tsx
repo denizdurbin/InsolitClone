@@ -75,7 +75,7 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
         setGeoStatus('success')
 
         const nextDistances: Record<string, string> = {}
-        offersWithLocation.forEach((offer) => {
+        offers.forEach((offer) => {
           if (!offer.coords) {
             return
           }
@@ -99,10 +99,15 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
   const filtered = useMemo(() => {
     const query = search.toLowerCase()
 
-    return offersWithLocation.filter(
+    return offers.filter(
       (offer) => !query || offer.title.toLowerCase().includes(query) || offer.categoryLabel.toLowerCase().includes(query)
     )
-  }, [offersWithLocation, search])
+  }, [offers, search])
+
+  const filteredWithLocation = useMemo(
+    () => filtered.filter((offer) => offer.coords || offer.address),
+    [filtered]
+  )
 
   const sorted = useMemo(() => {
     if (!userPosition || Object.keys(distances).length === 0) {
@@ -122,10 +127,10 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
   }, [filtered, userPosition, distances])
 
   useEffect(() => {
-    if (!selected && sorted.length > 0) {
-      setSelected(sorted[0])
+    if (!selected && filteredWithLocation.length > 0) {
+      setSelected(filteredWithLocation[0])
     }
-  }, [selected, sorted])
+  }, [selected, filteredWithLocation])
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-gray-50 dark:bg-dark-bg">
@@ -133,7 +138,8 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
         <div className="max-w-6xl mx-auto flex flex-wrap items-center gap-3">
           <div>
             <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-              <span className="text-pink">{sorted.length}</span> offres sur la carte
+              <span className="text-pink">{filtered.length}</span> offres
+              <span className="text-xs font-medium text-gray-500 ml-2">({filteredWithLocation.length} sur la carte)</span>
             </h1>
           </div>
 
@@ -246,7 +252,7 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
         </div>
 
         <div className="flex-1 min-h-[400px] md:min-h-0 relative">
-          <MapComponent offers={sorted} userPosition={userPosition} selected={selected} onSelectOffer={setSelected} />
+          <MapComponent offers={filteredWithLocation} userPosition={userPosition} selected={selected} onSelectOffer={setSelected} />
 
         </div>
       </div>

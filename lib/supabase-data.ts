@@ -21,6 +21,30 @@ type OfferRow = {
   longitude: number | null
 }
 
+type PartnerOfferRow = {
+  id: string
+  sort_order: number
+  title: string
+  description: string
+  category: Category
+  category_label: string
+  emoji: string
+  gradient: string
+  rating: number
+  badge: string | null
+  price: string | null
+  details: string[] | null
+  partner_id: string | null
+  is_active: boolean | null
+}
+
+type PartnerRow = {
+  id: string
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+}
+
 type FeatureRow = {
   sort_order: number
   icon: string
@@ -50,6 +74,8 @@ type TestimonialRow = {
 
 const OFFER_SELECT =
   'id,sort_order,title,description,category,category_label,emoji,gradient,rating,distance,badge,price,address,details,latitude,longitude'
+const OFFER_SELECT_WITH_PARTNER =
+  'id,sort_order,title,description,category,category_label,emoji,gradient,rating,badge,price,details,partner_id,is_active'
 
 const FEATURE_SELECT = 'sort_order,icon,gradient,title,description'
 const STEP_SELECT = 'id,sort_order,emoji,title,description'
@@ -83,6 +109,68 @@ function mapOffer(row: OfferRow): Offer {
   }
 }
 
+function mapPartnerOffer(row: PartnerOfferRow, partner?: PartnerRow): Offer {
+  const coords: [number, number] | undefined =
+    partner?.latitude !== null && partner?.latitude !== undefined && partner?.longitude !== null && partner?.longitude !== undefined
+      ? [partner.latitude, partner.longitude]
+      : undefined
+
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    category: row.category,
+    categoryLabel: row.category_label,
+    emoji: row.emoji,
+    gradient: row.gradient,
+    rating: row.rating,
+    distance: '—',
+    badge: row.badge ?? undefined,
+    price: row.price ?? undefined,
+    address: partner?.address ?? undefined,
+    details: row.details && row.details.length > 0 ? row.details : undefined,
+    coords,
+  }
+}
+
+async function fetchPartnersByIds(partnerIds: string[]) {
+  if (partnerIds.length === 0) {
+    return new Map<string, PartnerRow>()
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('partners')
+    .select('id,address,latitude,longitude')
+    .in('id', partnerIds)
+
+  logQueryError('fetchPartnersByIds', error)
+
+  const partners = (data ?? []) as PartnerRow[]
+  return new Map(partners.map((partner) => [partner.id, partner]))
+}
+
+async function getOffersFromPartnerSchema() {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('offers')
+    .select(OFFER_SELECT_WITH_PARTNER)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+
+  logQueryError('getOffers (partner schema)', error)
+
+  if (!data) {
+    return [] as Offer[]
+  }
+
+  const offerRows = data as unknown as PartnerOfferRow[]
+  const partnerIds = Array.from(new Set(offerRows.map((row) => row.partner_id).filter((id): id is string => Boolean(id))))
+  const partnersById = await fetchPartnersByIds(partnerIds)
+
+  return offerRows.map((row) => mapPartnerOffer(row, row.partner_id ? partnersById.get(row.partner_id) : undefined))
+}
+
 export async function getOffers(): Promise<Offer[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -90,13 +178,24 @@ export async function getOffers(): Promise<Offer[]> {
     .select(OFFER_SELECT)
     .order('sort_order', { ascending: true })
 
-  logQueryError('getOffers', error)
+  if (error) {
+    logQueryError('getOffers (legacy schema)', error)
+    return getOffersFromPartnerSchema()
+  }
 
   if (!data) {
     return []
   }
 
-  return (data as OfferRow[]).map(mapOffer)
+  const mapped = (data as OfferRow[]).map(mapOffer)
+  const hasLocationData = mapped.some((offer) => Boolean(offer.coords || offer.address))
+  if (hasLocationData) {
+    return mapped
+  }
+
+  // Some databases keep geodata only on partners; fallback when legacy rows are location-empty.
+  const partnerMapped = await getOffersFromPartnerSchema()
+  return partnerMapped.length > 0 ? partnerMapped : mapped
 }
 
 export async function getOfferById(id: string): Promise<Offer | null> {
@@ -107,13 +206,50 @@ export async function getOfferById(id: string): Promise<Offer | null> {
     .eq('id', id)
     .maybeSingle()
 
-  logQueryError('getOfferById', error)
+  if (error) {
+    logQueryError('getOfferById (legacy schema)', error)
+
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('offers')
+      .select(OFFER_SELECT_WITH_PARTNER)
+      .eq('id', id)
+      .maybeSingle()
+
+    logQueryError('getOfferById (partner schema)', fallbackError)
+
+    if (!fallbackData) {
+      return null
+    }
+
+    const row = fallbackData as unknown as PartnerOfferRow
+    const partnersById = await fetchPartnersByIds(row.partner_id ? [row.partner_id] : [])
+    return mapPartnerOffer(row, row.partner_id ? partnersById.get(row.partner_id) : undefined)
+  }
 
   if (!data) {
     return null
   }
 
-  return mapOffer(data as OfferRow)
+  const mapped = mapOffer(data as OfferRow)
+  if (mapped.coords || mapped.address) {
+    return mapped
+  }
+
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from('offers')
+    .select(OFFER_SELECT_WITH_PARTNER)
+    .eq('id', id)
+    .maybeSingle()
+
+  logQueryError('getOfferById (partner schema empty-location fallback)', fallbackError)
+
+  if (!fallbackData) {
+    return mapped
+  }
+
+  const row = fallbackData as unknown as PartnerOfferRow
+  const partnersById = await fetchPartnersByIds(row.partner_id ? [row.partner_id] : [])
+  return mapPartnerOffer(row, row.partner_id ? partnersById.get(row.partner_id) : undefined)
 }
 
 export async function getRelatedOffers(category: Category, excludeId: string, limit = 3): Promise<Offer[]> {
@@ -126,7 +262,30 @@ export async function getRelatedOffers(category: Category, excludeId: string, li
     .order('sort_order', { ascending: true })
     .limit(limit)
 
-  logQueryError('getRelatedOffers', error)
+  if (error) {
+    logQueryError('getRelatedOffers (legacy schema)', error)
+
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('offers')
+      .select(OFFER_SELECT_WITH_PARTNER)
+      .eq('category', category)
+      .neq('id', excludeId)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .limit(limit)
+
+    logQueryError('getRelatedOffers (partner schema)', fallbackError)
+
+    if (!fallbackData) {
+      return []
+    }
+
+    const rows = fallbackData as unknown as PartnerOfferRow[]
+    const partnerIds = Array.from(new Set(rows.map((row) => row.partner_id).filter((id): id is string => Boolean(id))))
+    const partnersById = await fetchPartnersByIds(partnerIds)
+
+    return rows.map((row) => mapPartnerOffer(row, row.partner_id ? partnersById.get(row.partner_id) : undefined))
+  }
 
   if (!data) {
     return []

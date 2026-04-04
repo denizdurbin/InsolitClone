@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Star, Heart, Award, MapPin, Settings, Trash2 } from 'lucide-react'
+import { Star, Heart, Award, MapPin, Settings, Trash2, Check, X } from 'lucide-react'
 import type { Offer } from '@/lib/data'
 import { OfferCard } from '@/components/ui/OfferCard'
 import { Button } from '@/components/ui/Button'
+import { useAuth } from '@/lib/auth'
 
 const badges = [
   { emoji: '🏆', label: 'Early adopter', color: 'from-yellow-400 to-orange-400' },
@@ -14,6 +15,16 @@ const badges = [
   { emoji: '🎯', label: 'Aventurier', color: 'from-purple-500 to-pink-500' },
   { emoji: '⭐', label: 'Top avis', color: 'from-blue-400 to-teal-400' },
 ]
+
+interface ProfileData {
+  prenom: string
+  nom: string
+  email: string
+  location: string
+  savingsCents: number
+  offersUsed: number
+  reviewsCount: number
+}
 
 interface ProfilClientProps {
   recentPurchases: Offer[]
@@ -72,6 +83,7 @@ function getMaxBirthDate(minAge: number) {
 
 export default function ProfilClient({ recentPurchases, profile }: ProfilClientProps) {
   const router = useRouter()
+  const { setAuthenticatedUser } = useAuth()
   const [isDeletingAccount, setIsDeletingAccount] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [pendingDeleteAccount, setPendingDeleteAccount] = useState(false)
@@ -94,8 +106,36 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
     })
   }
 
-  const initials = `${profile.prenom[0] ?? ''}${profile.nom[0] ?? ''}`.trim().toUpperCase() || (profile.email[0] ?? 'U').toUpperCase()
-  const fullName = `${profile.prenom} ${profile.nom}`.trim() || 'Utilisateur'
+      if (!response.ok || !payload?.user) {
+        throw new Error(payload?.message ?? 'Impossible de mettre a jour le profil pour le moment.')
+      }
+
+      const updatedProfile: ProfileData = {
+        prenom: payload.user.prenom,
+        nom: payload.user.nom,
+        email: payload.user.email,
+        location: payload.user.location,
+        savingsCents: payload.user.savingsCents,
+        offersUsed: payload.user.offersUsed,
+        reviewsCount: payload.user.reviewsCount,
+      }
+
+      setDisplayProfile(updatedProfile)
+      setEditableProfile({
+        prenom: payload.user.prenom,
+        nom: payload.user.nom,
+        location: payload.user.location,
+      })
+      setAuthenticatedUser(payload.user)
+      setCityOptions([])
+      setIsEditingProfile(false)
+      router.refresh()
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : 'Impossible de mettre a jour le profil pour le moment.')
+    } finally {
+      setIsSavingProfile(false)
+    }
+  }
 
   const handleSaveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -222,15 +262,16 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
                     <Trash2 size={14} aria-hidden="true" />
                     {isDeletingAccount ? 'Suppression...' : 'Supprimer le compte'}
                   </Button>
+                  {profileError && <p className="text-xs text-red-600 dark:text-red-400">{profileError}</p>}
                   {deleteError && <p className="text-xs text-red-600 dark:text-red-400">{deleteError}</p>}
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-6 mt-5 pt-5 border-t border-gray-100 dark:border-dark-border">
                 {[
-                  { label: 'Economies', value: formatMoney(profile.savingsCents) },
-                  { label: 'Offres utilisees', value: String(profile.offersUsed) },
-                  { label: 'Avis laisses', value: String(profile.reviewsCount) },
+                  { label: 'Economies', value: formatMoney(displayProfile.savingsCents) },
+                  { label: 'Offres utilisees', value: String(displayProfile.offersUsed) },
+                  { label: 'Avis laisses', value: String(displayProfile.reviewsCount) },
                 ].map(({ label, value }) => (
                   <div key={label}>
                     <p className="text-xl font-black text-gray-900 dark:text-white">{value}</p>

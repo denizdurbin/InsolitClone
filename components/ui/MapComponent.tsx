@@ -60,7 +60,11 @@ export default function MapComponent({ offers, userPosition, selected, onSelectO
   userPositionRef.current = userPosition
 
   useEffect(() => {
-    if (!mapRef.current || mapObj.current) return
+    let cancelled = false
+    const container = mapRef.current
+    const markers = markersRef.current
+
+    if (!container || mapObj.current) return
 
     let cancelled = false
 
@@ -199,6 +203,12 @@ export default function MapComponent({ offers, userPosition, selected, onSelectO
         markersRef.current.clear()
         userMarkerRef.current = null
       }
+
+      if (container) {
+        delete (container as HTMLDivElement & { _leaflet_id?: number })._leaflet_id
+      }
+
+      markers.clear()
     }
   }, [])
 

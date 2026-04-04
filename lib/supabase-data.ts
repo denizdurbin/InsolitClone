@@ -19,6 +19,15 @@ type OfferRow = {
   details: string[] | null
   latitude: number | null
   longitude: number | null
+  partner: {
+    address: string | null
+    latitude: number | null
+    longitude: number | null
+  } | Array<{
+    address: string | null
+    latitude: number | null
+    longitude: number | null
+  }> | null
 }
 
 type FeatureRow = {
@@ -49,7 +58,7 @@ type TestimonialRow = {
 }
 
 const OFFER_SELECT =
-  'id,sort_order,title,description,category,category_label,emoji,gradient,rating,distance,badge,price,address,details,latitude,longitude'
+  'id,sort_order,title,description,category,category_label,emoji,gradient,rating,distance,badge,price,address,details,latitude,longitude,partner:partners!offers_partner_id_fkey(address,latitude,longitude)'
 
 const FEATURE_SELECT = 'sort_order,icon,gradient,title,description'
 const STEP_SELECT = 'id,sort_order,emoji,title,description'
@@ -61,9 +70,20 @@ function logQueryError(context: string, error: PostgrestError | null) {
   }
 }
 
+function getPartnerLocation(row: OfferRow) {
+  if (!row.partner) return null
+  return Array.isArray(row.partner) ? (row.partner[0] ?? null) : row.partner
+}
+
 function mapOffer(row: OfferRow): Offer {
+  const partner = getPartnerLocation(row)
+
+  const latitude = row.latitude ?? partner?.latitude ?? null
+  const longitude = row.longitude ?? partner?.longitude ?? null
   const coords: [number, number] | undefined =
-    row.latitude !== null && row.longitude !== null ? [row.latitude, row.longitude] : undefined
+    latitude !== null && longitude !== null ? [latitude, longitude] : undefined
+
+  const address = row.address ?? partner?.address ?? undefined
 
   return {
     id: row.id,
@@ -77,7 +97,7 @@ function mapOffer(row: OfferRow): Offer {
     distance: row.distance ?? '—',
     badge: row.badge ?? undefined,
     price: row.price ?? undefined,
-    address: row.address ?? undefined,
+    address,
     details: row.details && row.details.length > 0 ? row.details : undefined,
     coords,
   }

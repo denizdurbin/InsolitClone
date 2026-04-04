@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
 import { MapPin, Search, Navigation, Loader2, AlertCircle } from 'lucide-react'
 import type { Offer } from '@/lib/data'
 import 'leaflet/dist/leaflet.css'
@@ -20,6 +19,7 @@ const MapComponent = dynamic(() => import('@/components/ui/MapComponent'), {
 })
 
 type GeoStatus = 'idle' | 'loading' | 'success' | 'denied' | 'error'
+type ManualLocationStatus = 'idle' | 'loading' | 'success' | 'error'
 
 const categoryColor: Record<string, string> = {
   restaurant: 'bg-orange-500',
@@ -40,7 +40,12 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
   const [search, setSearch] = useState('')
   const [userPosition, setUserPosition] = useState<[number, number] | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
+  const [manualAddress, setManualAddress] = useState('')
+  const [manualStatus, setManualStatus] = useState<ManualLocationStatus>('idle')
+  const [manualMessage, setManualMessage] = useState('')
   const [distances, setDistances] = useState<Record<string, string>>({})
+  const geoWatchRef = useRef<number | null>(null)
+  const geoTimeoutRef = useRef<number | null>(null)
 
   function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const radius = 6371
@@ -61,40 +66,172 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
       return
     }
 
-    setGeoStatus('loading')
+    if (geoWatchRef.current !== null) {
+      navigator.geolocation.clearWatch(geoWatchRef.current)
+      geoWatchRef.current = null
+    }
+    if (geoTimeoutRef.current !== null) {
+      window.clearTimeout(geoTimeoutRef.current)
+      geoTimeoutRef.current = null
+    }
 
-    navigator.geolocation.getCurrentPosition(
+    setGeoStatus('loading')
+    setManualStatus('idle')
+    setManualMessage('')
+
+    const applyPosition = (coords: [number, number]) => {
+      setUserPosition(coords)
+      setGeoStatus('success')
+
+      const nextDistances: Record<string, string> = {}
+      offersWithLocation.forEach((offer) => {
+        if (!offer.coords) return
+        const distance = haversine(coords[0], coords[1], offer.coords[0], offer.coords[1])
+        nextDistances[offer.id] = distance < 1 ? `${Math.round(distance * 1000)} m` : `${distance.toFixed(1)} km`
+      })
+      setDistances(nextDistances)
+    }
+
+    const stopTracking = () => {
+      if (geoWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(geoWatchRef.current)
+        geoWatchRef.current = null
+      }
+      if (geoTimeoutRef.current !== null) {
+        window.clearTimeout(geoTimeoutRef.current)
+        geoTimeoutRef.current = null
+      }
+    }
+
+    let best: { coords: [number, number]; accuracy: number } | null = null
+
+    geoWatchRef.current = navigator.geolocation.watchPosition(
       (position) => {
+        const accuracy = Math.round(position.coords.accuracy)
         const coords: [number, number] = [position.coords.latitude, position.coords.longitude]
-        console.log('[Lieux] geolocation success', {
+
+        console.log('[Lieux] geolocation sample', {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-        })
-        setUserPosition(coords)
-        setGeoStatus('success')
-
-        const nextDistances: Record<string, string> = {}
-        offersWithLocation.forEach((offer) => {
-          if (!offer.coords) {
-            return
-          }
-          const distance = haversine(coords[0], coords[1], offer.coords[0], offer.coords[1])
-          nextDistances[offer.id] = distance < 1 ? `${Math.round(distance * 1000)} m` : `${distance.toFixed(1)} km`
+          accuracy,
         })
 
-        setDistances(nextDistances)
+        if (!best || accuracy < best.accuracy) {
+          best = { coords, accuracy }
+          applyPosition(coords)
+        }
+
+        // Consider fix good enough, no need to keep waiting.
+        if (accuracy <= 25) {
+          stopTracking()
+        }
       },
       (error) => {
         console.log('[Lieux] geolocation error', {
           code: error.code,
           message: error.message,
         })
-        setGeoStatus(error.code === error.PERMISSION_DENIED ? 'denied' : 'error')
+
+        if (error.code === error.PERMISSION_DENIED) {
+          stopTracking()
+          setGeoStatus('denied')
+          return
+        }
+
+        // Keep best known point if one sample was captured.
+        if (best) {
+          applyPosition(best.coords)
+        } else {
+          setGeoStatus('error')
+        }
+        stopTracking()
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     )
+
+    geoTimeoutRef.current = window.setTimeout(() => {
+      if (best) {
+        applyPosition(best.coords)
+      } else {
+        setGeoStatus('error')
+      }
+      stopTracking()
+    }, 12000)
   }
+
+  async function applyManualLocation() {
+    const address = manualAddress.trim()
+    if (!address) {
+      setManualStatus('error')
+      setManualMessage('Entre une adresse pour te localiser.')
+      return
+    }
+
+    setManualStatus('loading')
+    setManualMessage('')
+
+    try {
+      const response = await fetch('/api/geocode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address }),
+      })
+
+      const payload = await response.json()
+      if (!response.ok || !Number.isFinite(payload?.lat) || !Number.isFinite(payload?.lng)) {
+        setManualStatus('error')
+        setManualMessage(payload?.error || 'Adresse introuvable.')
+        return
+      }
+
+      const coords: [number, number] = [Number(payload.lat), Number(payload.lng)]
+      setUserPosition(coords)
+      setGeoStatus('idle')
+
+      const nextDistances: Record<string, string> = {}
+      offersWithLocation.forEach((offer) => {
+        if (!offer.coords) return
+        const distance = haversine(coords[0], coords[1], offer.coords[0], offer.coords[1])
+        nextDistances[offer.id] = distance < 1 ? `${Math.round(distance * 1000)} m` : `${distance.toFixed(1)} km`
+      })
+      setDistances(nextDistances)
+
+      setManualStatus('success')
+      setManualMessage(payload?.displayName || 'Position mise a jour depuis l\'adresse.')
+    } catch {
+      setManualStatus('error')
+      setManualMessage('Impossible de geocoder cette adresse pour le moment.')
+    }
+  }
+
+  function resetManualLocation() {
+    if (geoWatchRef.current !== null) {
+      navigator.geolocation.clearWatch(geoWatchRef.current)
+      geoWatchRef.current = null
+    }
+    if (geoTimeoutRef.current !== null) {
+      window.clearTimeout(geoTimeoutRef.current)
+      geoTimeoutRef.current = null
+    }
+
+    setManualAddress('')
+    setManualStatus('idle')
+    setManualMessage('')
+    setUserPosition(null)
+    setDistances({})
+    setGeoStatus('idle')
+  }
+
+  useEffect(() => {
+    return () => {
+      if (geoWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(geoWatchRef.current)
+      }
+      if (geoTimeoutRef.current !== null) {
+        window.clearTimeout(geoTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const filtered = useMemo(() => {
     const query = search.toLowerCase()
@@ -189,6 +326,38 @@ export default function LieuxClient({ offers }: LieuxClientProps) {
           )}
           {geoStatus === 'success' && (
             <p className="text-xs text-green w-full">✓ Offres triées par distance depuis ta position</p>
+          )}
+
+          <div className="w-full flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+            <input
+              type="text"
+              value={manualAddress}
+              onChange={(event) => setManualAddress(event.target.value)}
+              placeholder="Adresse precise (ex: 12 rue du Temple, Paris)"
+              className="w-full sm:max-w-md rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-alt px-3 py-2 text-sm focus:border-pink outline-none"
+            />
+            <button
+              type="button"
+              onClick={applyManualLocation}
+              disabled={manualStatus === 'loading'}
+              className="px-4 py-2 rounded-xl border border-pink text-pink hover:bg-pink hover:text-white text-sm font-semibold transition-all disabled:opacity-60"
+            >
+              {manualStatus === 'loading' ? 'Adresse…' : 'Utiliser cette adresse'}
+            </button>
+            <button
+              type="button"
+              onClick={resetManualLocation}
+              className="px-4 py-2 rounded-xl border border-gray-300 dark:border-dark-border text-gray-600 dark:text-gray-300 hover:border-pink hover:text-pink text-sm font-semibold transition-all"
+            >
+              Réinitialiser
+            </button>
+          </div>
+
+          {manualStatus === 'success' && manualMessage && (
+            <p className="text-xs text-green w-full">✓ {manualMessage}</p>
+          )}
+          {manualStatus === 'error' && manualMessage && (
+            <p className="text-xs text-red-500 w-full">{manualMessage}</p>
           )}
         </div>
       </div>

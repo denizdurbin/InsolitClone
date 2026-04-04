@@ -224,16 +224,15 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
                     <Trash2 size={14} aria-hidden="true" />
                     {isDeletingAccount ? 'Suppression...' : 'Supprimer le compte'}
                   </Button>
-                  {profileError && <p className="text-xs text-red-600 dark:text-red-400">{profileError}</p>}
                   {deleteError && <p className="text-xs text-red-600 dark:text-red-400">{deleteError}</p>}
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-6 mt-5 pt-5 border-t border-gray-100 dark:border-dark-border">
                 {[
-                  { label: 'Economies', value: formatMoney(displayProfile.savingsCents) },
-                  { label: 'Offres utilisees', value: String(displayProfile.offersUsed) },
-                  { label: 'Avis laisses', value: String(displayProfile.reviewsCount) },
+                  { label: 'Economies', value: formatMoney(profile.savingsCents) },
+                  { label: 'Offres utilisees', value: String(profile.offersUsed) },
+                  { label: 'Avis laisses', value: String(profile.reviewsCount) },
                 ].map(({ label, value }) => (
                   <div key={label}>
                     <p className="text-xl font-black text-gray-900 dark:text-white">{value}</p>

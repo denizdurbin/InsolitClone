@@ -455,7 +455,7 @@ export default function AdminPage() {
                   <PlusCircle size={18} />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold">Création d'offre</h2>
+                  <h2 className="text-xl font-bold">Création d&apos;offre</h2>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Ajoutez une nouvelle offre à la plateforme.</p>
                 </div>
               </div>
@@ -536,7 +536,7 @@ export default function AdminPage() {
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-8 h-8 rounded-full bg-pink/10 text-pink flex items-center justify-center"><Pencil size={14} /></div>
                   <div>
-                    <h3 className="text-lg font-semibold">Modifier l'offre</h3>
+                    <h3 className="text-lg font-semibold">Modifier l&apos;offre</h3>
                     <p className="text-xs text-gray-500">ID: {editId}</p>
                   </div>
                 </div>
@@ -920,11 +920,11 @@ export default function AdminPage() {
                   <AlertTriangle size={18} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Supprimer l'offre de <span className="text-pink">{pendingDelete.title}?</span></h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Supprimer l&apos;offre de <span className="text-pink">{pendingDelete.title}?</span></h3>
                   
                 </div>
               </div>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Cette action est irréversible. L'offre et toutes ses données associées seront supprimées.</p>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Cette action est irréversible. L&apos;offre et toutes ses données associées seront supprimées.</p>
               {editError && (
                 <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/40 rounded-xl px-3 py-2 mb-3">
                   <AlertTriangle size={16} className="mt-0.5" />

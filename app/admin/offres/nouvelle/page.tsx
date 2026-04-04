@@ -290,7 +290,7 @@ export default function NewAdminOfferPage() {
                         {geocodeState === 'loading' ? (
                           <span className="flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Géocodage...</span>
                         ) : (
-                          <span className="flex items-center gap-2"><Navigation size={16} /> Convertir l'adresse</span>
+                          <span className="flex items-center gap-2"><Navigation size={16} /> Convertir l&apos;adresse</span>
                         )}
                       </Button>
                     </div>
@@ -396,7 +396,7 @@ export default function NewAdminOfferPage() {
                   {formState === 'loading' ? (
                     <span className="flex items-center gap-2"><Loader2 className="animate-spin" size={16} /> Création...</span>
                   ) : (
-                    <span className="flex items-center gap-2"><PlusCircle size={16} /> Créer l'offre</span>
+                    <span className="flex items-center gap-2"><PlusCircle size={16} /> Créer l&apos;offre</span>
                   )}
                 </Button>
               </div>

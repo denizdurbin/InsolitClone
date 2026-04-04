@@ -214,7 +214,7 @@ export function OffresClient({ offers, initialFilter, initialSearch, initialLoca
 
           {geoStatus === 'denied' && (
             <p className="text-xs text-red-400 mt-2">
-              Autorise la localisation dans les réglages du site puis reclique sur "Ma position".
+              Autorise la localisation dans les réglages du site puis reclique sur &quot;Ma position&quot;.
             </p>
           )}
           {geoStatus === 'success' && (

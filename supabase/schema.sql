@@ -14,8 +14,20 @@ BEGIN
 END
 $$;
 
+CREATE TABLE IF NOT EXISTS public.partners (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  emoji TEXT,
+  address TEXT,
+  latitude DOUBLE PRECISION,
+  longitude DOUBLE PRECISION,
+  google_maps_link TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS public.offers (
   id TEXT PRIMARY KEY,
+  partner_id TEXT REFERENCES public.partners(id) ON DELETE SET NULL,
   sort_order INTEGER NOT NULL UNIQUE CHECK (sort_order > 0),
   title TEXT NOT NULL,
   description TEXT NOT NULL,
@@ -27,10 +39,7 @@ CREATE TABLE IF NOT EXISTS public.offers (
   distance TEXT NOT NULL DEFAULT '—',
   badge TEXT,
   price TEXT,
-  address TEXT,
   details TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-  latitude DOUBLE PRECISION,
-  longitude DOUBLE PRECISION,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -114,6 +123,14 @@ CREATE TABLE IF NOT EXISTS public.user_sessions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS public.favorites (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  partner_id TEXT NOT NULL REFERENCES public.partners(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, partner_id)
+);
+
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -137,6 +154,7 @@ DROP FUNCTION IF EXISTS public.delete_auth_user_on_profile_delete();
 
 CREATE INDEX IF NOT EXISTS offers_category_idx ON public.offers (category);
 CREATE INDEX IF NOT EXISTS offers_sort_order_idx ON public.offers (sort_order);
+CREATE INDEX IF NOT EXISTS offers_partner_id_idx ON public.offers (partner_id);
 CREATE INDEX IF NOT EXISTS features_sort_order_idx ON public.features (sort_order);
 CREATE INDEX IF NOT EXISTS steps_sort_order_idx ON public.steps (sort_order);
 CREATE INDEX IF NOT EXISTS testimonials_sort_order_idx ON public.testimonials (sort_order);
@@ -145,7 +163,10 @@ CREATE INDEX IF NOT EXISTS reviews_offer_id_idx ON public.reviews (offer_id);
 CREATE INDEX IF NOT EXISTS reviews_created_at_idx ON public.reviews (created_at DESC);
 CREATE INDEX IF NOT EXISTS user_sessions_user_id_idx ON public.user_sessions (user_id);
 CREATE INDEX IF NOT EXISTS user_sessions_expires_at_idx ON public.user_sessions (expires_at);
+CREATE INDEX IF NOT EXISTS favorites_user_id_idx ON public.favorites (user_id);
+CREATE INDEX IF NOT EXISTS favorites_partner_id_idx ON public.favorites (partner_id);
 
+ALTER TABLE public.partners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.offers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.features ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.steps ENABLE ROW LEVEL SECURITY;
@@ -153,6 +174,10 @@ ALTER TABLE public.testimonials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.favorites ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read partners" ON public.partners;
+CREATE POLICY "Public read partners" ON public.partners FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Public read offers" ON public.offers;
 CREATE POLICY "Public read offers" ON public.offers FOR SELECT USING (true);
@@ -177,10 +202,13 @@ DROP POLICY IF EXISTS "Users read own profile" ON public.user_sessions;
 DROP POLICY IF EXISTS "Users insert own profile" ON public.user_sessions;
 DROP POLICY IF EXISTS "Users update own profile" ON public.user_sessions;
 DROP POLICY IF EXISTS "Users delete own profile" ON public.user_sessions;
+DROP POLICY IF EXISTS "Users manage own favorites" ON public.favorites;
 
+GRANT SELECT ON public.partners TO anon, authenticated;
 GRANT SELECT ON public.offers TO anon, authenticated;
 GRANT SELECT ON public.features TO anon, authenticated;
 GRANT SELECT ON public.steps TO anon, authenticated;
 GRANT SELECT ON public.testimonials TO anon, authenticated;
 REVOKE ALL ON public.users FROM anon, authenticated;
 REVOKE ALL ON public.user_sessions FROM anon, authenticated;
+REVOKE ALL ON public.favorites FROM anon, authenticated;

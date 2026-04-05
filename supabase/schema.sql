@@ -14,8 +14,36 @@ BEGIN
 END
 $$;
 
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID PRIMARY KEY,
+  prenom TEXT NOT NULL,
+  nom TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT,
+  location TEXT NOT NULL DEFAULT 'Paris, Ile-de-France',
+  birth_date DATE,
+  savings_cents INTEGER NOT NULL DEFAULT 0 CHECK (savings_cents >= 0),
+  offers_used INTEGER NOT NULL DEFAULT 0 CHECK (offers_used >= 0),
+  reviews_count INTEGER NOT NULL DEFAULT 0 CHECK (reviews_count >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.partners (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  logo TEXT,
+  address TEXT,
+  latitude DOUBLE PRECISION,
+  longitude DOUBLE PRECISION,
+  google_maps_link TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS public.offers (
   id TEXT PRIMARY KEY,
+  partner_id TEXT REFERENCES public.partners (id) ON DELETE SET NULL,
   sort_order INTEGER NOT NULL UNIQUE CHECK (sort_order > 0),
   title TEXT NOT NULL,
   description TEXT NOT NULL,
@@ -32,6 +60,13 @@ CREATE TABLE IF NOT EXISTS public.offers (
   latitude DOUBLE PRECISION,
   longitude DOUBLE PRECISION,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.favorites (
+  user_id UUID NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+  offer_id TEXT NOT NULL REFERENCES public.offers (id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, offer_id)
 );
 
 CREATE TABLE IF NOT EXISTS public.features (
@@ -79,21 +114,6 @@ CREATE TABLE IF NOT EXISTS public.reviews (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS public.users (
-  id UUID PRIMARY KEY,
-  prenom TEXT NOT NULL,
-  nom TEXT NOT NULL DEFAULT '',
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT,
-  location TEXT NOT NULL DEFAULT 'Paris, Ile-de-France',
-  birth_date DATE,
-  savings_cents INTEGER NOT NULL DEFAULT 0 CHECK (savings_cents >= 0),
-  offers_used INTEGER NOT NULL DEFAULT 0 CHECK (offers_used >= 0),
-  reviews_count INTEGER NOT NULL DEFAULT 0 CHECK (reviews_count >= 0),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_id_fkey;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS birth_date DATE;
@@ -106,6 +126,18 @@ ALTER TABLE public.users
       AND birth_date <= (CURRENT_DATE - INTERVAL '16 years')::DATE
     )
   );
+
+ALTER TABLE public.partners ADD COLUMN IF NOT EXISTS logo TEXT;
+ALTER TABLE public.partners ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.partners ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
+ALTER TABLE public.partners ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
+ALTER TABLE public.partners ADD COLUMN IF NOT EXISTS google_maps_link TEXT;
+ALTER TABLE public.partners ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+ALTER TABLE public.offers ADD COLUMN IF NOT EXISTS partner_id TEXT REFERENCES public.partners (id) ON DELETE SET NULL;
+ALTER TABLE public.offers ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.offers ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
+ALTER TABLE public.offers ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
 
 CREATE TABLE IF NOT EXISTS public.user_sessions (
   token_hash TEXT PRIMARY KEY,
@@ -137,6 +169,9 @@ DROP FUNCTION IF EXISTS public.delete_auth_user_on_profile_delete();
 
 CREATE INDEX IF NOT EXISTS offers_category_idx ON public.offers (category);
 CREATE INDEX IF NOT EXISTS offers_sort_order_idx ON public.offers (sort_order);
+CREATE INDEX IF NOT EXISTS offers_partner_id_idx ON public.offers (partner_id);
+CREATE INDEX IF NOT EXISTS favorites_user_id_idx ON public.favorites (user_id);
+CREATE INDEX IF NOT EXISTS favorites_offer_id_idx ON public.favorites (offer_id);
 CREATE INDEX IF NOT EXISTS features_sort_order_idx ON public.features (sort_order);
 CREATE INDEX IF NOT EXISTS steps_sort_order_idx ON public.steps (sort_order);
 CREATE INDEX IF NOT EXISTS testimonials_sort_order_idx ON public.testimonials (sort_order);
@@ -147,6 +182,8 @@ CREATE INDEX IF NOT EXISTS user_sessions_user_id_idx ON public.user_sessions (us
 CREATE INDEX IF NOT EXISTS user_sessions_expires_at_idx ON public.user_sessions (expires_at);
 
 ALTER TABLE public.offers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.partners ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.favorites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.features ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.testimonials ENABLE ROW LEVEL SECURITY;
@@ -156,6 +193,12 @@ ALTER TABLE public.user_sessions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public read offers" ON public.offers;
 CREATE POLICY "Public read offers" ON public.offers FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read partners" ON public.partners;
+CREATE POLICY "Public read partners" ON public.partners FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users read own favorites" ON public.favorites;
+CREATE POLICY "Users read own favorites" ON public.favorites FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Public read features" ON public.features;
 CREATE POLICY "Public read features" ON public.features FOR SELECT USING (true);
@@ -179,6 +222,8 @@ DROP POLICY IF EXISTS "Users update own profile" ON public.user_sessions;
 DROP POLICY IF EXISTS "Users delete own profile" ON public.user_sessions;
 
 GRANT SELECT ON public.offers TO anon, authenticated;
+GRANT SELECT ON public.partners TO anon, authenticated;
+GRANT SELECT, INSERT, DELETE ON public.favorites TO authenticated;
 GRANT SELECT ON public.features TO anon, authenticated;
 GRANT SELECT ON public.steps TO anon, authenticated;
 GRANT SELECT ON public.testimonials TO anon, authenticated;

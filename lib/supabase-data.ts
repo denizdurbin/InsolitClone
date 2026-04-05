@@ -2,6 +2,12 @@ import type { PostgrestError } from '@supabase/supabase-js'
 import type { Category, Feature, Offer, Step, Testimonial } from '@/lib/data'
 import { createClient } from '@/utils/supabase/server'
 
+type PartnerRow = {
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+}
+
 type OfferRow = {
   id: string
   sort_order: number
@@ -15,10 +21,8 @@ type OfferRow = {
   distance: string | null
   badge: string | null
   price: string | null
-  address: string | null
   details: string[] | null
-  latitude: number | null
-  longitude: number | null
+  partner: PartnerRow | PartnerRow[] | null
 }
 
 type FeatureRow = {
@@ -49,7 +53,7 @@ type TestimonialRow = {
 }
 
 const OFFER_SELECT =
-  'id,sort_order,title,description,category,category_label,emoji,gradient,rating,distance,badge,price,address,details,latitude,longitude'
+  'id,sort_order,title,description,category,category_label,emoji,gradient,rating,distance,badge,price,details,partner:partners(address,latitude,longitude)'
 
 const FEATURE_SELECT = 'sort_order,icon,gradient,title,description'
 const STEP_SELECT = 'id,sort_order,emoji,title,description'
@@ -61,9 +65,23 @@ function logQueryError(context: string, error: PostgrestError | null) {
   }
 }
 
+function normalizePartner(partner: OfferRow['partner']): PartnerRow | null {
+  if (Array.isArray(partner)) {
+    return partner[0] ?? null
+  }
+  return partner
+}
+
 function mapOffer(row: OfferRow): Offer {
+  const partner = normalizePartner(row.partner)
+
   const coords: [number, number] | undefined =
-    row.latitude !== null && row.longitude !== null ? [row.latitude, row.longitude] : undefined
+    partner?.latitude !== null &&
+    partner?.latitude !== undefined &&
+    partner?.longitude !== null &&
+    partner?.longitude !== undefined
+      ? [partner.latitude, partner.longitude]
+      : undefined
 
   return {
     id: row.id,
@@ -77,7 +95,7 @@ function mapOffer(row: OfferRow): Offer {
     distance: row.distance ?? '—',
     badge: row.badge ?? undefined,
     price: row.price ?? undefined,
-    address: row.address ?? undefined,
+    address: partner?.address ?? undefined,
     details: row.details && row.details.length > 0 ? row.details : undefined,
     coords,
   }
@@ -96,7 +114,7 @@ export async function getOffers(): Promise<Offer[]> {
     return []
   }
 
-  return (data as OfferRow[]).map(mapOffer)
+  return (data as unknown as OfferRow[]).map(mapOffer)
 }
 
 export async function getOfferById(id: string): Promise<Offer | null> {
@@ -113,7 +131,7 @@ export async function getOfferById(id: string): Promise<Offer | null> {
     return null
   }
 
-  return mapOffer(data as OfferRow)
+  return mapOffer(data as unknown as OfferRow)
 }
 
 export async function getRelatedOffers(category: Category, excludeId: string, limit = 3): Promise<Offer[]> {
@@ -132,7 +150,7 @@ export async function getRelatedOffers(category: Category, excludeId: string, li
     return []
   }
 
-  return (data as OfferRow[]).map(mapOffer)
+  return (data as unknown as OfferRow[]).map(mapOffer)
 }
 
 export async function getFeatures(): Promise<Feature[]> {

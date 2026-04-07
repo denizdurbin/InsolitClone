@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import OfferDetailMap from '@/components/ui/OfferDetailMap'
+import FavoriteButton from '@/components/ui/FavoriteButton'
 import { OfferReviewsSection } from '@/components/sections/OfferReviewsSection'
 import { getOfferById, getRelatedOffers, getReviewsForOffer } from '@/lib/supabase-data'
 import { Star, MapPin, ArrowLeft, Clock, Tag, CheckCircle } from 'lucide-react'
@@ -179,9 +180,7 @@ export default async function OfferDetailPage({ params }: PageProps) {
                             <Button className="w-full justify-center mb-3" size="lg">
                                 Utiliser cette offre
                             </Button>
-                            <Button variant="outline" className="w-full justify-center" size="sm">
-                                Ajouter aux favoris
-                            </Button>
+                            <FavoriteButton offerId={offer.id} />
 
                             <div className="flex items-start gap-2 mt-5 pt-5 border-t border-gray-100 dark:border-dark-border">
                                 <Clock size={14} className="text-gray-400 mt-0.5 flex-shrink-0" aria-hidden="true" />

@@ -184,6 +184,28 @@ export async function getRelatedOffers(category: Category, excludeId: string, li
   return (data as OfferRow[]).map(mapOffer)
 }
 
+export async function getOffersByIds(ids: string[]): Promise<Offer[]> {
+  if (ids.length === 0) {
+    return []
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('offers')
+    .select(OFFER_SELECT)
+    .in('id', ids)
+
+  logQueryError('getOffersByIds', error)
+
+  if (!data) {
+    return []
+  }
+
+  const offers = (data as OfferRow[]).map(mapOffer)
+  const order = new Map(ids.map((id, index) => [id, index]))
+  return offers.sort((left, right) => (order.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(right.id) ?? Number.MAX_SAFE_INTEGER))
+}
+
 export async function getFeatures(): Promise<Feature[]> {
   const supabase = await createClient()
   const { data, error } = await supabase

@@ -60,19 +60,31 @@ export default function OfferDetailMap({ offer }: OfferDetailMapProps) {
     }, [offer.address, offer.coords])
 
     useEffect(() => {
-        if (!mapRef.current || !markerCoords) return
+        if (!markerCoords) return
 
-        if (mapInstanceRef.current) {
-            mapInstanceRef.current.remove()
-            mapInstanceRef.current = null
-        }
+        const container = mapRef.current
+        if (!container) return
 
-        import('leaflet').then((L) => {
+        let cancelled = false
+
+        void import('leaflet').then((L) => {
+            if (cancelled || !container.isConnected) return
+
+            if (mapInstanceRef.current) {
+                mapInstanceRef.current.remove()
+                mapInstanceRef.current = null
+            }
+
             const color = categoryColor[offer.category] ?? '#ff1870'
-            const map = L.map(mapRef.current!, {
+            const map = L.map(container, {
                 zoomControl: true,
                 attributionControl: true,
             }).setView(markerCoords, 15)
+
+            if (cancelled) {
+                map.remove()
+                return
+            }
 
             mapInstanceRef.current = map
 
@@ -135,18 +147,22 @@ export default function OfferDetailMap({ offer }: OfferDetailMapProps) {
 
             L.marker(markerCoords, { icon }).addTo(map)
 
+            requestAnimationFrame(() => {
+                if (!cancelled) map.invalidateSize()
+            })
             setTimeout(() => {
-                map.invalidateSize()
+                if (!cancelled) map.invalidateSize()
             }, 100)
         })
 
         return () => {
+            cancelled = true
             if (mapInstanceRef.current) {
                 mapInstanceRef.current.remove()
                 mapInstanceRef.current = null
             }
         }
-    }, [markerCoords, offer])
+    }, [markerCoords, offer.category, offer.emoji, offer.title, offer.id])
 
     if (!markerCoords) {
         return (

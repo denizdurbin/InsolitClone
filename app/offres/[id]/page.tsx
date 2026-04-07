@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import OfferDetailMap from '@/components/ui/OfferDetailMap'
 import FavoriteButton from '@/components/ui/FavoriteButton'
-import { getOfferById, getRelatedOffers } from '@/lib/supabase-data'
+import { OfferReviewsSection } from '@/components/sections/OfferReviewsSection'
+import { getOfferById, getRelatedOffers, getReviewsForOffer } from '@/lib/supabase-data'
 import { Star, MapPin, ArrowLeft, Clock, Tag, CheckCircle } from 'lucide-react'
 
 interface PageProps {
@@ -32,7 +33,10 @@ export default async function OfferDetailPage({ params }: PageProps) {
     const mapsQuery = offer.address?.trim() || (offer.coords ? `${offer.coords[0]},${offer.coords[1]}` : '')
     const googleMapsUrl = mapsQuery ? `https://www.google.com/maps?q=${encodeURIComponent(mapsQuery)}` : '#'
 
-    const relatedOffers = await getRelatedOffers(offer.category, offer.id, 3)
+    const [relatedOffers, reviews] = await Promise.all([
+        getRelatedOffers(offer.category, offer.id, 3),
+        getReviewsForOffer(offer.id, 20),
+    ])
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
@@ -159,10 +163,16 @@ export default async function OfferDetailPage({ params }: PageProps) {
                                 </div>
                             </div>
                         )}
+
+                        <OfferReviewsSection
+                            offerId={offer.id}
+                            offerTitle={offer.title}
+                            initialReviews={reviews}
+                        />
                     </div>
 
                     <div className="space-y-4">
-                        <div className="bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl p-6 sticky top-24">
+                        <div className="bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl p-6">
                             <p className="text-xs text-gray-400 uppercase font-bold tracking-widest mb-1">Offre Insolit</p>
                             <p className="text-lg font-extrabold text-gray-900 dark:text-white mb-1">{offer.description}</p>
                             {offer.badge && <p className="text-2xl font-black text-pink mb-5">{offer.badge}</p>}

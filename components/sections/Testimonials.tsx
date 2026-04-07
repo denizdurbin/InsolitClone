@@ -4,12 +4,15 @@ import { motion } from 'framer-motion'
 import { Star } from 'lucide-react'
 import type { Testimonial } from '@/lib/data'
 import { Button } from '@/components/ui/Button'
+import { useAuth } from '@/lib/auth'
 
 interface TestimonialsProps {
   testimonials: Testimonial[]
 }
 
 export function Testimonials({ testimonials }: TestimonialsProps) {
+  const { isAuthenticated, loading } = useAuth()
+
   return (
     <section
       aria-labelledby="testimonials-title"
@@ -76,29 +79,30 @@ export function Testimonials({ testimonials }: TestimonialsProps) {
           ))}
         </div>
 
-        {/* CTA Block */}
-        <motion.div
-          className="
-            rounded-3xl p-10 text-center
-            bg-pink/5 dark:bg-dark-card
-            border border-pink/20 dark:border-pink/15
-          "
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-        >
-          <h3 className="text-2xl md:text-3xl font-extrabold tracking-tight mb-3">
-            Prêt à <span className="text-pink">profiter plus ?</span>
-          </h3>
-          <p className="text-gray-500 dark:text-gray-400 mb-7 max-w-md mx-auto text-sm leading-relaxed">
-            Rejoins des milliers d&apos;utilisateurs qui économisent et découvrent de nouvelles expériences chaque jour.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <Button href="/inscription" size="lg">Commencer gratuitement</Button>
-            <Button href="/offres" variant="outline" size="lg">Voir les offres</Button>
-          </div>
-        </motion.div>
+        {!loading && !isAuthenticated && (
+          <motion.div
+            className="
+              rounded-3xl p-10 text-center
+              bg-pink/5 dark:bg-dark-card
+              border border-pink/20 dark:border-pink/15
+            "
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+          >
+            <h3 className="text-2xl md:text-3xl font-extrabold tracking-tight mb-3">
+              Prêt à <span className="text-pink">profiter plus ?</span>
+            </h3>
+            <p className="text-gray-500 dark:text-gray-400 mb-7 max-w-md mx-auto text-sm leading-relaxed">
+              Rejoins des milliers d&apos;utilisateurs qui économisent et découvrent de nouvelles expériences chaque jour.
+            </p>
+            <div className="flex flex-wrap justify-center gap-3">
+              <Button href="/inscription" size="lg">Commencer gratuitement</Button>
+              <Button href="/offres" variant="outline" size="lg">Voir les offres</Button>
+            </div>
+          </motion.div>
+        )}
       </div>
     </section>
   )

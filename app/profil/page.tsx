@@ -1,5 +1,5 @@
 import ProfilClient from '@/app/profil/ProfilClient'
-import { getOffersByIds } from '@/lib/supabase-data'
+import { getOffersByIds, getReviewsByUserId } from '@/lib/supabase-data'
 import { getCurrentUserFromCookie } from '@/lib/custom-auth-server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
@@ -28,6 +28,8 @@ export default async function ProfilPage() {
     recentPurchases = []
   }
 
+  const reviews = await getReviewsByUserId(user.id)
+
   return (
     <ProfilClient
       recentPurchases={recentPurchases}
@@ -41,6 +43,7 @@ export default async function ProfilPage() {
         offersUsed: user.offersUsed,
         reviewsCount: user.reviewsCount,
       }}
+      reviews={reviews}
     />
   )
 }

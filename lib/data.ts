@@ -29,6 +29,19 @@ export interface Testimonial {
   text: string
 }
 
+export interface Review {
+  id: number
+  userId: string | null
+  userName: string
+  userEmail: string
+  offerId: string | null
+  offerTitle: string
+  rating: number
+  title: string
+  text: string
+  createdAt: string
+}
+
 export interface Step {
   number: number
   emoji: string

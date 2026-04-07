@@ -1,13 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Star, Heart, Award, MapPin, Settings, Trash2, Check, X } from 'lucide-react'
-import type { Offer } from '@/lib/data'
+import { Star, Heart, Award, MapPin, Settings, Trash2 } from 'lucide-react'
+import type { Offer, Review } from '@/lib/data'
 import { OfferCard } from '@/components/ui/OfferCard'
 import { Button } from '@/components/ui/Button'
-import { useAuth } from '@/lib/auth'
 
 const badges = [
   { emoji: '🏆', label: 'Early adopter', color: 'from-yellow-400 to-orange-400' },
@@ -28,6 +27,7 @@ interface ProfilClientProps {
     offersUsed: number
     reviewsCount: number
   }
+  reviews: Review[]
 }
 
 function isAtLeast16YearsOld(birthDate: string) {
@@ -64,6 +64,17 @@ function formatMoney(cents: number) {
   }).format(cents / 100)
 }
 
+function formatReviewDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Date inconnue'
+
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date)
+}
+
 function getMaxBirthDate(minAge: number) {
   const now = new Date()
   const cutoff = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
@@ -71,9 +82,8 @@ function getMaxBirthDate(minAge: number) {
   return cutoff.toISOString().slice(0, 10)
 }
 
-export default function ProfilClient({ recentPurchases, profile }: ProfilClientProps) {
+export default function ProfilClient({ recentPurchases, profile, reviews }: ProfilClientProps) {
   const router = useRouter()
-  const { setAuthenticatedUser } = useAuth()
   const [isDeletingAccount, setIsDeletingAccount] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [pendingDeleteAccount, setPendingDeleteAccount] = useState(false)
@@ -345,24 +355,29 @@ export default function ProfilClient({ recentPurchases, profile }: ProfilClientP
               </h2>
 
               <ul className="space-y-4">
-                {[
-                  { title: 'KFC Villiers-sur-Marne', rating: 5, text: 'Super offre, le burger était délicieux !' },
-                  { title: 'Escape Game Paris', rating: 4, text: 'Très bonne expérience, je recommande.' },
-                ].map(({ title, rating, text }) => (
-                  <li key={title} className="pb-4 border-b border-gray-50 dark:border-dark-border last:border-0 last:pb-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{title}</p>
-                      <div className="flex gap-0.5" aria-label={`${rating} étoiles`}>
+                {reviews.length === 0 && (
+                  <li className="rounded-xl border border-dashed border-gray-200 dark:border-dark-border p-4 text-sm text-gray-500 dark:text-gray-400">
+                    Aucun avis pour le moment. Va sur une offre pour laisser ton premier commentaire.
+                  </li>
+                )}
+
+                {reviews.map((review) => (
+                  <li key={review.id} className="pb-4 border-b border-gray-50 dark:border-dark-border last:border-0 last:pb-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{review.offerTitle}</p>
+                      <div className="flex gap-0.5" aria-label={`${review.rating} étoiles`}>
                         {Array.from({ length: 5 }).map((_, index) => (
                           <Star
                             key={index}
                             size={11}
-                            className={index < rating ? 'fill-yellow text-yellow' : 'fill-gray-200 text-gray-200'}
+                            className={index < review.rating ? 'fill-yellow text-yellow' : 'fill-gray-200 text-gray-200'}
                           />
                         ))}
                       </div>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{text}</p>
+                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{review.title}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{review.text}</p>
+                    <p className="text-[11px] text-gray-400 mt-2">{formatReviewDate(review.createdAt)}</p>
                   </li>
                 ))}
               </ul>

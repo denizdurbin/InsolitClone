@@ -22,21 +22,28 @@ function loadEnvFile(filePath: string) {
 
 loadEnvFile(path.resolve(__dirname, '.env.test.local'))
 
+const isCI = Boolean(process.env.CI)
+const withAllure = Boolean(process.env.ALLURE)
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const reporters: any[] = ['default']
+if (isCI || withAllure) reporters.push(['allure-vitest/reporter', { resultsDir: 'allure-results/e2e' }])
+if (isCI) reporters.push(['junit', { outputFile: 'test-results/e2e.xml' }])
+
 export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
     include: ['__tests__/e2e/**/*.test.ts'],
-    setupFiles: process.env.ALLURE
-      ? ['__tests__/e2e/setup.ts', 'allure-vitest/setup']
-      : ['__tests__/e2e/setup.ts'],
+    setupFiles: [
+      '__tests__/e2e/setup.ts',
+      ...(isCI || withAllure ? ['allure-vitest/setup'] : []),
+    ],
     testTimeout: 15000,
     hookTimeout: 15000,
     // Run serially to avoid race conditions on shared DB state
     sequence: { concurrent: false },
-    reporters: process.env.ALLURE
-      ? ['default', ['allure-vitest/reporter', { resultsDir: 'allure-results/e2e' }]]
-      : ['default'],
+    reporters,
   },
   resolve: {
     alias: {

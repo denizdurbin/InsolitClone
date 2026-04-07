@@ -1,21 +1,28 @@
 import { defineConfig } from 'vitest/config'
 import path from 'path'
 
+const isCI = Boolean(process.env.CI)
+const withAllure = Boolean(process.env.ALLURE)
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const reporters: any[] = ['default']
+if (isCI || withAllure) reporters.push(['allure-vitest/reporter', { resultsDir: 'allure-results/unit' }])
+if (isCI) reporters.push(['junit', { outputFile: 'test-results/unit.xml' }])
+
 export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    setupFiles: process.env.ALLURE
-      ? ['__tests__/setup.ts', 'allure-vitest/setup']
-      : ['__tests__/setup.ts'],
+    setupFiles: [
+      '__tests__/setup.ts',
+      ...(isCI || withAllure ? ['allure-vitest/setup'] : []),
+    ],
     exclude: ['**/__tests__/e2e/**', '**/node_modules/**'],
     coverage: {
       provider: 'v8',
       include: ['app/api/**/*.ts'],
     },
-    reporters: process.env.ALLURE
-      ? ['default', ['allure-vitest/reporter', { resultsDir: 'allure-results/unit' }]]
-      : ['default'],
+    reporters,
   },
   resolve: {
     alias: {

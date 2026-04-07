@@ -161,7 +161,7 @@ export default async function OfferDetailPage({ params }: PageProps) {
                     </div>
 
                     <div className="space-y-4">
-                        <div className="bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl p-6 sticky top-24">
+                        <div className="bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-2xl p-6">
                             <p className="text-xs text-gray-400 uppercase font-bold tracking-widest mb-1">Offre Insolit</p>
                             <p className="text-lg font-extrabold text-gray-900 dark:text-white mb-1">{offer.description}</p>
                             {offer.badge && <p className="text-2xl font-black text-pink mb-5">{offer.badge}</p>}

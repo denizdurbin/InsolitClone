@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import OfferDetailMap from '@/components/ui/OfferDetailMap'
+import OfferDetailDistance from '@/components/ui/OfferDetailDistance'
 import FavoriteButton from '@/components/ui/FavoriteButton'
 import { OfferReviewsSection } from '@/components/sections/OfferReviewsSection'
 import { getOfferById, getRelatedOffers, getReviewsForOffer } from '@/lib/supabase-data'
@@ -108,12 +109,7 @@ export default async function OfferDetailPage({ params }: PageProps) {
                                         ))}
                                         <span className="font-semibold text-gray-800 dark:text-gray-200">{offer.rating}.0</span>
                                     </div>
-                                    {offer.distance && offer.distance !== '—' && (
-                                        <div className="flex items-center gap-1">
-                                            <MapPin size={14} className="text-pink" aria-hidden="true" />
-                                            <span>{offer.distance}</span>
-                                        </div>
-                                    )}
+                                    <OfferDetailDistance coords={offer.coords} />
                                     {offer.badge && (
                                         <span className="bg-pink/10 text-pink border border-pink/25 rounded-full px-3 py-0.5 text-xs font-bold">
                     {offer.badge}

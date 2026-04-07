@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 
 interface FavoriteButtonProps {
@@ -8,9 +9,12 @@ interface FavoriteButtonProps {
 }
 
 export default function FavoriteButton({ offerId }: FavoriteButtonProps) {
+  const router = useRouter()
+  const pathname = usePathname()
   const [isFavorite, setIsFavorite] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [requiresLogin, setRequiresLogin] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -24,6 +28,7 @@ export default function FavoriteButton({ offerId }: FavoriteButtonProps) {
         if (!active) return
         if (response.status === 401) {
           setIsFavorite(false)
+          setRequiresLogin(true)
           setLoading(false)
           return
         }
@@ -48,12 +53,23 @@ export default function FavoriteButton({ offerId }: FavoriteButtonProps) {
   }, [offerId])
 
   async function toggleFavorite() {
+    if (requiresLogin) {
+      router.push(`/connexion?next=${encodeURIComponent(pathname || '/offres')}`)
+      return
+    }
+
     setSaving(true)
     try {
       if (isFavorite) {
         const response = await fetch(`/api/favorites/${encodeURIComponent(offerId)}`, {
           method: 'DELETE',
         })
+
+        if (response.status === 401) {
+          setRequiresLogin(true)
+          router.push(`/connexion?next=${encodeURIComponent(pathname || '/offres')}`)
+          return
+        }
 
         if (!response.ok) return
         setIsFavorite(false)
@@ -68,6 +84,12 @@ export default function FavoriteButton({ offerId }: FavoriteButtonProps) {
         body: JSON.stringify({ offerId }),
       })
 
+      if (response.status === 401) {
+        setRequiresLogin(true)
+        router.push(`/connexion?next=${encodeURIComponent(pathname || '/offres')}`)
+        return
+      }
+
       if (!response.ok) return
       setIsFavorite(true)
     } finally {
@@ -76,14 +98,19 @@ export default function FavoriteButton({ offerId }: FavoriteButtonProps) {
   }
 
   return (
-    <Button
-      variant={isFavorite ? 'primary' : 'outline'}
-      className="w-full justify-center"
-      size="sm"
-      onClick={toggleFavorite}
-      disabled={loading || saving}
-    >
-      {loading ? 'Chargement...' : saving ? 'Mise a jour...' : isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-    </Button>
+    <div className="space-y-2">
+      <Button
+        variant={isFavorite ? 'primary' : 'outline'}
+        className="w-full justify-center"
+        size="sm"
+        onClick={toggleFavorite}
+        disabled={loading || saving}
+      >
+        {loading ? 'Chargement...' : saving ? 'Mise a jour...' : isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+      </Button>
+      {requiresLogin && !loading && (
+        <p className="text-xs text-gray-500 text-center">Connecte-toi pour ajouter cette offre aux favoris.</p>
+      )}
+    </div>
   )
 }

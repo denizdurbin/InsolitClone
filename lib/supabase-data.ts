@@ -1,5 +1,5 @@
 import type { PostgrestError } from '@supabase/supabase-js'
-import type { Category, Feature, Offer, Step, Testimonial } from '@/lib/data'
+import type { Category, Feature, Offer, Review, Step, Testimonial } from '@/lib/data'
 import { createClient } from '@/utils/supabase/server'
 
 type OfferRow = {
@@ -57,12 +57,26 @@ type TestimonialRow = {
   text: string
 }
 
+type ReviewRow = {
+  id: number
+  user_id: string | null
+  user_name_snapshot: string
+  user_email_snapshot: string
+  offer_id: string | null
+  offer_title_snapshot: string
+  rating: number
+  title: string
+  text: string
+  created_at: string
+}
+
 const OFFER_SELECT =
   'id,sort_order,title,description,category,category_label,emoji,gradient,rating,distance,badge,price,address,details,latitude,longitude,partner:partners!offers_partner_id_fkey(address,latitude,longitude)'
 
 const FEATURE_SELECT = 'sort_order,icon,gradient,title,description'
 const STEP_SELECT = 'id,sort_order,emoji,title,description'
 const TESTIMONIAL_SELECT = 'id,sort_order,name,role,avatar,gradient,rating,text'
+const REVIEW_SELECT = 'id,user_id,user_name_snapshot,user_email_snapshot,offer_id,offer_title_snapshot,rating,title,text,created_at'
 
 function logQueryError(context: string, error: PostgrestError | null) {
   if (error) {
@@ -100,6 +114,21 @@ function mapOffer(row: OfferRow): Offer {
     address,
     details: row.details && row.details.length > 0 ? row.details : undefined,
     coords,
+  }
+}
+
+function mapReview(row: ReviewRow): Review {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name_snapshot,
+    userEmail: row.user_email_snapshot,
+    offerId: row.offer_id,
+    offerTitle: row.offer_title_snapshot,
+    rating: row.rating,
+    title: row.title,
+    text: row.text,
+    createdAt: row.created_at,
   }
 }
 
@@ -219,6 +248,42 @@ export async function getTestimonials(): Promise<Testimonial[]> {
     rating: row.rating,
     text: row.text,
   }))
+}
+
+export async function getReviewsByUserId(userId: string, limit = 20): Promise<Review[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('reviews')
+    .select(REVIEW_SELECT)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  logQueryError('getReviewsByUserId', error)
+
+  if (!data) {
+    return []
+  }
+
+  return (data as ReviewRow[]).map(mapReview)
+}
+
+export async function getReviewsForOffer(offerId: string, limit = 20): Promise<Review[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('reviews')
+    .select(REVIEW_SELECT)
+    .eq('offer_id', offerId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  logQueryError('getReviewsForOffer', error)
+
+  if (!data) {
+    return []
+  }
+
+  return (data as ReviewRow[]).map(mapReview)
 }
 
 export async function getHomePageData() {

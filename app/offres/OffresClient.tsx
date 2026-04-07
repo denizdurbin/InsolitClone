@@ -104,7 +104,7 @@ export function OffresClient({ offers, initialFilter, initialSearch, initialLoca
 
   const offersWithComputedDistance = useMemo(() => {
     if (!userPosition) {
-      return filtered
+      return filtered.map((offer) => ({ ...offer, distance: '' }))
     }
 
     return filtered.map((offer) => {

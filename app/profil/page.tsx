@@ -1,7 +1,9 @@
 import ProfilClient from '@/app/profil/ProfilClient'
-import { getOffers } from '@/lib/supabase-data'
+import { getOffersByIds } from '@/lib/supabase-data'
 import { getCurrentUserFromCookie } from '@/lib/custom-auth-server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
+import type { Offer } from '@/lib/data'
 
 export default async function ProfilPage() {
   const user = await getCurrentUserFromCookie()
@@ -10,8 +12,21 @@ export default async function ProfilPage() {
     redirect('/connexion')
   }
 
-  const offers = await getOffers()
-  const recentPurchases = offers.slice(0, 4)
+  let recentPurchases: Offer[] = []
+  try {
+    const admin = createAdminClient()
+    const { data } = await admin
+      .from('favorites')
+      .select('offer_id')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(4)
+
+    const favoriteIds = (data ?? []).map((row) => row.offer_id as string)
+    recentPurchases = await getOffersByIds(favoriteIds)
+  } catch {
+    recentPurchases = []
+  }
 
   return (
     <ProfilClient

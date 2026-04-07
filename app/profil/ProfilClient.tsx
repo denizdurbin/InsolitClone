@@ -7,6 +7,7 @@ import { Star, Heart, Award, MapPin, Settings, Trash2 } from 'lucide-react'
 import type { Offer, Review } from '@/lib/data'
 import { OfferCard } from '@/components/ui/OfferCard'
 import { Button } from '@/components/ui/Button'
+import { useAuth } from '@/lib/auth'
 
 const badges = [
   { emoji: '🏆', label: 'Early adopter', color: 'from-yellow-400 to-orange-400' },
@@ -84,6 +85,7 @@ function getMaxBirthDate(minAge: number) {
 
 export default function ProfilClient({ recentPurchases, profile, reviews }: ProfilClientProps) {
   const router = useRouter()
+  const { setAuthenticatedUser } = useAuth()
   const [isDeletingAccount, setIsDeletingAccount] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [pendingDeleteAccount, setPendingDeleteAccount] = useState(false)
@@ -170,6 +172,7 @@ export default function ProfilClient({ recentPurchases, profile, reviews }: Prof
         throw new Error(payload?.message ?? 'Impossible de supprimer le compte pour le moment.')
       }
 
+      setAuthenticatedUser(null)
       router.replace('/')
       router.refresh()
     } catch (error) {

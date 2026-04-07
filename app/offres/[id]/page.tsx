@@ -41,20 +41,40 @@ export default async function OfferDetailPage({ params }: PageProps) {
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
-            <div className={`relative h-64 md:h-80 overflow-hidden bg-gradient-to-br ${offer.gradient} flex items-center justify-center`}>
-                {offer.emoji?.startsWith('http') ? (
-                    <img
-                        src={offer.emoji}
-                        alt=""
-                        aria-hidden="true"
-                        className="w-auto h-full object-cover"
-                    />
-                ) : (
-                    <span className="text-white font-black text-5xl md:text-7xl drop-shadow-lg" aria-hidden="true">
-            {offer.emoji}
-        </span>
-                )}
-                <div className="absolute inset-0 bg-black/20" />
+            <div className={`relative h-64 md:h-80 overflow-hidden bg-gradient-to-br ${offer.gradient}`}>
+                <div className="absolute inset-0 bg-black/15" />
+                <div className="absolute -top-16 -left-16 h-48 w-48 rounded-full bg-white/15 blur-3xl" />
+                <div className="absolute -bottom-20 -right-10 h-64 w-64 rounded-full bg-pink/20 blur-3xl" />
+                <div className="absolute inset-0 opacity-30 [background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.45)_1px,transparent_0)] [background-size:22px_22px]" />
+
+                <div className="relative z-10 h-full max-w-4xl mx-auto px-6 flex items-center justify-between gap-6">
+                    <div className="min-w-0 max-w-2xl text-white">
+                        <p className="text-xs md:text-sm font-bold uppercase tracking-[0.28em] text-white/80 mb-3">
+                            {offer.categoryLabel}
+                        </p>
+                        <h1 className="text-3xl md:text-5xl font-black tracking-tight leading-tight drop-shadow-sm">
+                            {offer.title}
+                        </h1>
+                        <p className="mt-3 text-sm md:text-base text-white/85 max-w-xl line-clamp-2">
+                            {offer.description}
+                        </p>
+                    </div>
+
+                    <div className="hidden md:flex flex-shrink-0 items-center justify-center w-28 h-28 rounded-3xl bg-white/12 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden">
+                        {offer.emoji?.startsWith('http') ? (
+                            <img
+                                src={offer.emoji}
+                                alt=""
+                                aria-hidden="true"
+                                className="w-full h-full object-cover"
+                            />
+                        ) : (
+                            <span className="text-white font-black text-5xl drop-shadow-lg" aria-hidden="true">
+                                {offer.emoji}
+                            </span>
+                        )}
+                    </div>
+                </div>
 
                 <Link
                     href="/offres"

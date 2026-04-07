@@ -11,7 +11,9 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts --mode test",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "test:report": "ALLURE=1 vitest run && ALLURE=1 vitest run --config vitest.e2e.config.ts --mode test",
+    "report:open": "allure generate allure-results/unit allure-results/e2e -o allure-report --clean && allure open allure-report"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.0",
@@ -29,7 +31,10 @@
     "tailwind-merge": "^2.4.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["supabase", "unrs-resolver"]
+    "onlyBuiltDependencies": [
+      "supabase",
+      "unrs-resolver"
+    ]
   },
   "devDependencies": {
     "@types/node": "^20.14.11",
@@ -38,6 +43,9 @@
     "@typescript-eslint/eslint-plugin": "^8.58.0",
     "@typescript-eslint/parser": "^8.58.0",
     "@vitest/coverage-v8": "^4.1.2",
+    "@vitest/runner": "^4.1.3",
+    "allure-commandline": "^2.38.1",
+    "allure-vitest": "^3.7.0",
     "autoprefixer": "^10.4.19",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.5",

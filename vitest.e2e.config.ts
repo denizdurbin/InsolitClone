@@ -27,11 +27,16 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['__tests__/e2e/**/*.test.ts'],
-    setupFiles: ['__tests__/e2e/setup.ts'],
+    setupFiles: process.env.ALLURE
+      ? ['__tests__/e2e/setup.ts', 'allure-vitest/setup']
+      : ['__tests__/e2e/setup.ts'],
     testTimeout: 15000,
     hookTimeout: 15000,
     // Run serially to avoid race conditions on shared DB state
     sequence: { concurrent: false },
+    reporters: process.env.ALLURE
+      ? ['default', ['allure-vitest/reporter', { resultsDir: 'allure-results/e2e' }]]
+      : ['default'],
   },
   resolve: {
     alias: {

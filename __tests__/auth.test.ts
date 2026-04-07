@@ -79,6 +79,7 @@ describe('TC-AUTH-01 — Inscription réussie', () => {
       prenom: 'Jean',
       nom: 'Dupont',
       location: 'Paris',
+      birthDate: '2000-01-01',
       email: 'jean@example.com',
       password: 'motdepasse123',
     })

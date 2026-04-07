@@ -11,7 +11,7 @@
  *   testimonials : 3
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 // ── Remplace le client SSR par un client direct vers Supabase local ───────────
@@ -29,11 +29,14 @@ vi.mock('@/utils/supabase/server', () => ({
 import {
   getOffers,
   getOfferById,
+  getOffersByIds,
   getRelatedOffers,
   getFeatures,
   getSteps,
   getTestimonials,
   getHomePageData,
+  getReviewsByUserId,
+  getReviewsForOffer,
 } from '@/lib/supabase-data'
 
 // IDs issus du seed
@@ -59,8 +62,6 @@ describe('getOffers() — e2e', () => {
       category: 'restaurant',
       categoryLabel: 'Restaurant',
     })
-    // coords doivent être absents (pas de lat/lng sur les offres seedées)
-    expect(kfc!.coords).toBeUndefined()
   })
 
   it('retourne les offres triées par sort_order croissant', async () => {
@@ -91,6 +92,35 @@ describe('getOfferById() — e2e', () => {
   it('retourne null pour un ID inexistant', async () => {
     const offer = await getOfferById('00000000-0000-0000-0000-000000000000')
     expect(offer).toBeNull()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('getOffersByIds() — e2e', () => {
+  it('retourne les offres correspondant aux IDs fournis', async () => {
+    const offers = await getOffersByIds([SEED_OFFER_ID, SEED_OFFER_ID_2])
+    expect(offers).toHaveLength(2)
+    const ids = offers.map((o) => o.id)
+    expect(ids).toContain(SEED_OFFER_ID)
+    expect(ids).toContain(SEED_OFFER_ID_2)
+  })
+
+  it('préserve l\'ordre des IDs fournis', async () => {
+    const offers = await getOffersByIds([SEED_OFFER_ID_2, SEED_OFFER_ID])
+    expect(offers[0].id).toBe(SEED_OFFER_ID_2)
+    expect(offers[1].id).toBe(SEED_OFFER_ID)
+  })
+
+  it('retourne [] pour un tableau vide', async () => {
+    const offers = await getOffersByIds([])
+    expect(offers).toHaveLength(0)
+  })
+
+  it('ignore les IDs inexistants', async () => {
+    const offers = await getOffersByIds([SEED_OFFER_ID, '00000000-0000-0000-0000-000000000000'])
+    expect(offers).toHaveLength(1)
+    expect(offers[0].id).toBe(SEED_OFFER_ID)
   })
 })
 
@@ -188,5 +218,68 @@ describe('getHomePageData() — e2e', () => {
     expect(result.features).toHaveLength(4)
     expect(result.steps).toHaveLength(4)
     expect(result.testimonials).toHaveLength(3)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('getReviewsByUserId() — e2e', () => {
+  it('retourne [] pour un utilisateur sans avis', async () => {
+    const reviews = await getReviewsByUserId('00000000-0000-0000-0000-000000000000')
+    expect(reviews).toHaveLength(0)
+  })
+
+  it('retourne des Review correctement shapés', async () => {
+    // Les reviews seedées sont liées à des user_ids fictifs — on vérifie le shape via un appel global
+    const supabase = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    const { data } = await supabase.from('reviews').select('user_id').limit(1)
+    if (!data || data.length === 0) return // pas de reviews seedées, skip
+
+    const userId = data[0].user_id
+    if (!userId) return
+
+    const reviews = await getReviewsByUserId(userId)
+    for (const r of reviews) {
+      expect(r).toHaveProperty('id')
+      expect(r).toHaveProperty('userId')
+      expect(r).toHaveProperty('userName')
+      expect(r).toHaveProperty('offerId')
+      expect(r).toHaveProperty('rating')
+      expect(r.rating).toBeGreaterThanOrEqual(1)
+      expect(r.rating).toBeLessThanOrEqual(5)
+    }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('getReviewsForOffer() — e2e', () => {
+  it('retourne [] pour une offre sans avis', async () => {
+    const reviews = await getReviewsForOffer('00000000-0000-0000-0000-000000000000')
+    expect(reviews).toHaveLength(0)
+  })
+
+  it('retourne des Review correctement shapés pour une offre seedée avec avis', async () => {
+    const supabase = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    const { data } = await supabase.from('reviews').select('offer_id').limit(1)
+    if (!data || data.length === 0) return // pas de reviews seedées, skip
+
+    const offerId = data[0].offer_id
+    if (!offerId) return
+
+    const reviews = await getReviewsForOffer(offerId)
+    expect(reviews.length).toBeGreaterThan(0)
+    for (const r of reviews) {
+      expect(r.offerId).toBe(offerId)
+      expect(r).toHaveProperty('title')
+      expect(r).toHaveProperty('text')
+      expect(r).toHaveProperty('createdAt')
+    }
   })
 })

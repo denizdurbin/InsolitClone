@@ -31,6 +31,18 @@ function postJson(url: string, body: unknown) {
   })
 }
 
+function registerPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    prenom: 'E2E',
+    nom: 'Test',
+    location: 'Paris',
+    birthDate: '2000-01-01',
+    email: TEST_EMAIL,
+    password: TEST_PASSWORD,
+    ...overrides,
+  }
+}
+
 // Clean up test user after each test so tests stay independent
 afterEach(async () => {
   await deleteUserByEmail(TEST_EMAIL)
@@ -45,13 +57,7 @@ afterAll(async () => {
 
 describe('TC-AUTH-01 — Inscription réussie (e2e)', () => {
   it('crée réellement un utilisateur en base et retourne 201', async () => {
-    const req = postJson('http://localhost/api/auth/register', {
-      prenom: 'E2E',
-      nom: 'Test',
-      location: 'Paris',
-      email: TEST_EMAIL,
-      password: TEST_PASSWORD,
-    })
+    const req = postJson('http://localhost/api/auth/register', registerPayload())
 
     const res = await register(req)
 
@@ -69,25 +75,16 @@ describe('TC-AUTH-01 — Inscription réussie (e2e)', () => {
 
   it('retourne 409 si l\'email est déjà utilisé', async () => {
     // Premier register
-    await register(
-      postJson('http://localhost/api/auth/register', {
-        prenom: 'E2E',
-        nom: 'Test',
-        location: 'Paris',
-        email: TEST_EMAIL,
-        password: TEST_PASSWORD,
-      })
-    )
+    await register(postJson('http://localhost/api/auth/register', registerPayload()))
 
     // Deuxième register avec le même email
     const res = await register(
-      postJson('http://localhost/api/auth/register', {
+      postJson('http://localhost/api/auth/register', registerPayload({
         prenom: 'Autre',
         nom: 'User',
         location: 'Lyon',
-        email: TEST_EMAIL,
         password: 'autremotdepasse',
-      })
+      }))
     )
 
     expect(res.status).toBe(409)
@@ -99,13 +96,7 @@ describe('TC-AUTH-01 — Inscription réussie (e2e)', () => {
 describe('TC-AUTH-02 — Inscription invalide (e2e)', () => {
   it('retourne 400 et ne crée aucun compte si le mot de passe est trop court', async () => {
     const res = await register(
-      postJson('http://localhost/api/auth/register', {
-        prenom: 'E2E',
-        nom: 'Test',
-        location: 'Paris',
-        email: TEST_EMAIL,
-        password: 'court',
-      })
+      postJson('http://localhost/api/auth/register', registerPayload({ password: 'court' }))
     )
 
     expect(res.status).toBe(400)
@@ -119,6 +110,22 @@ describe('TC-AUTH-02 — Inscription invalide (e2e)', () => {
     )
     expect(loginRes.status).toBe(401)
   })
+
+  it('retourne 400 si la date de naissance est manquante', async () => {
+    const res = await register(
+      postJson('http://localhost/api/auth/register', registerPayload({ birthDate: '' }))
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('retourne 400 si l\'utilisateur a moins de 16 ans', async () => {
+    const res = await register(
+      postJson('http://localhost/api/auth/register', registerPayload({ birthDate: '2020-01-01' }))
+    )
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json).toHaveProperty('message')
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,15 +133,7 @@ describe('TC-AUTH-02 — Inscription invalide (e2e)', () => {
 describe('TC-AUTH-03 — Connexion réussie (e2e)', () => {
   it('retourne 200 et un cookie de session valide', async () => {
     // Créer le compte d'abord
-    await register(
-      postJson('http://localhost/api/auth/register', {
-        prenom: 'E2E',
-        nom: 'Test',
-        location: 'Paris',
-        email: TEST_EMAIL,
-        password: TEST_PASSWORD,
-      })
-    )
+    await register(postJson('http://localhost/api/auth/register', registerPayload()))
 
     const res = await login(
       postJson('http://localhost/api/auth/login', {
@@ -154,15 +153,7 @@ describe('TC-AUTH-03 — Connexion réussie (e2e)', () => {
 
 describe('TC-AUTH-04 — Connexion invalide (e2e)', () => {
   it('retourne 401 avec un mauvais mot de passe', async () => {
-    await register(
-      postJson('http://localhost/api/auth/register', {
-        prenom: 'E2E',
-        nom: 'Test',
-        location: 'Paris',
-        email: TEST_EMAIL,
-        password: TEST_PASSWORD,
-      })
-    )
+    await register(postJson('http://localhost/api/auth/register', registerPayload()))
 
     const res = await login(
       postJson('http://localhost/api/auth/login', {
@@ -174,6 +165,16 @@ describe('TC-AUTH-04 — Connexion invalide (e2e)', () => {
     expect(res.status).toBe(401)
     const json = await res.json()
     expect(json).toHaveProperty('message')
+  })
+
+  it('retourne 401 pour un email inexistant', async () => {
+    const res = await login(
+      postJson('http://localhost/api/auth/login', {
+        email: 'inexistant@insolit-test.local',
+        password: TEST_PASSWORD,
+      })
+    )
+    expect(res.status).toBe(401)
   })
 })
 
@@ -194,13 +195,7 @@ describe('TC-AUTH-05b — Récupérer utilisateur courant connecté (e2e)', () =
   it('retourne 200 avec les infos de l\'utilisateur via une vraie session', async () => {
     // Inscription → récupérer le vrai token de session
     const registerRes = await register(
-      postJson('http://localhost/api/auth/register', {
-        prenom: 'E2E',
-        nom: 'Test',
-        location: 'Paris',
-        email: TEST_EMAIL,
-        password: TEST_PASSWORD,
-      })
+      postJson('http://localhost/api/auth/register', registerPayload())
     )
     expect(registerRes.status).toBe(201)
 
@@ -214,6 +209,9 @@ describe('TC-AUTH-05b — Récupérer utilisateur courant connecté (e2e)', () =
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json.user.email).toBe(TEST_EMAIL)
+    expect(json.user).toHaveProperty('id')
+    expect(json.user).toHaveProperty('prenom')
+    expect(json.user).toHaveProperty('birthDate')
   })
 })
 
@@ -223,13 +221,7 @@ describe('TC-AUTH-06 — Déconnexion (e2e)', () => {
   it('supprime réellement la session en base et retourne 200', async () => {
     // Créer un compte et récupérer la session
     const registerRes = await register(
-      postJson('http://localhost/api/auth/register', {
-        prenom: 'E2E',
-        nom: 'Test',
-        location: 'Paris',
-        email: TEST_EMAIL,
-        password: TEST_PASSWORD,
-      })
+      postJson('http://localhost/api/auth/register', registerPayload())
     )
     const token = extractSessionCookie(registerRes)!
     mockCookies(token)

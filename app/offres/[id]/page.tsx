@@ -1,9 +1,9 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { Button } from '@/components/ui/Button'
 import OfferDetailMap from '@/components/ui/OfferDetailMap'
 import OfferDetailDistance from '@/components/ui/OfferDetailDistance'
 import FavoriteButton from '@/components/ui/FavoriteButton'
+import { OfferQrButton } from '@/components/ui/OfferQrButton'
 import { OfferReviewsSection } from '@/components/sections/OfferReviewsSection'
 import { getOfferById, getRelatedOffers, getReviewsForOffer } from '@/lib/supabase-data'
 import { Star, MapPin, ArrowLeft, Clock, Tag, CheckCircle } from 'lucide-react'
@@ -193,9 +193,7 @@ export default async function OfferDetailPage({ params }: PageProps) {
                             <p className="text-lg font-extrabold text-gray-900 dark:text-white mb-1">{offer.description}</p>
                             {offer.badge && <p className="text-2xl font-black text-pink mb-5">{offer.badge}</p>}
 
-                            <Button className="w-full justify-center mb-3" size="lg">
-                                Utiliser cette offre
-                            </Button>
+                            <OfferQrButton offerId={offer.id} offerTitle={offer.title} />
                             <FavoriteButton offerId={offer.id} />
 
                             <div className="flex items-start gap-2 mt-5 pt-5 border-t border-gray-100 dark:border-dark-border">

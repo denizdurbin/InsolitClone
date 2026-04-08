@@ -59,7 +59,6 @@ export function OfferQrButton({ offerId, offerTitle }: OfferQrButtonProps) {
           >
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-pink mb-1">Proof of concept</p>
                 <h2 id="offer-qr-title" className="text-lg font-extrabold text-gray-900 dark:text-white">
                   {offerTitle}
                 </h2>
